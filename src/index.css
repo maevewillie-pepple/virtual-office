@@ -1,0 +1,159 @@
+@import "tailwindcss";
+
+/* ─── Design Tokens ───────────────────────────────────────────── */
+@theme {
+  /* Backgrounds */
+  --color-canvas:      #F7F5EF;
+  --color-surface:     #FFFEFA;
+  --color-muted:       #EEEBE2;
+
+  /* Text */
+  --color-ink:         #30352F;
+  --color-ink-2:       #666B60;
+  --color-ink-3:       #A9AB9F;
+
+  /* Accent – olive (use sparingly for active/selection) */
+  --color-olive:       #66765C;
+  --color-olive-soft:  #E5EADD;
+  --color-olive-dim:   #D4DBC9;
+
+  /* Borders */
+  --color-border:      #D9D6CD;
+  --color-border-strong: #A9AB9F;
+
+  /* Decorative */
+  --color-clay:        #BA8C75;
+  --color-clay-soft:   #F2E3D9;
+
+  /* Semantic */
+  --color-success:     #4A7C59;
+  --color-success-soft:#E2EFE6;
+  --color-warning:     #9A6F3A;
+  --color-warning-soft:#FDF3E0;
+  --color-error:       #B44A3F;
+  --color-error-soft:  #FDECEA;
+  --color-disabled:    #C4C6BE;
+
+  /* Focus */
+  --color-focus:       #66765C;
+
+  /* Typography */
+  --font-display:      'Space Mono', 'Courier New', monospace;
+  --font-sans:         'DM Sans', system-ui, -apple-system, sans-serif;
+}
+
+/* ─── Reset ───────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: #F7F5EF;
+  color: #30352F;
+  font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 22px;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+#root {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+/* ─── Typography utilities ────────────────────────────────────── */
+.font-display   { font-family: 'Space Mono', 'Courier New', monospace; }
+.font-sans      { font-family: 'DM Sans', system-ui, sans-serif; }
+
+.type-display-xl {
+  font-family: 'Space Mono', 'Courier New', monospace;
+  font-size: 56px; line-height: 64px; font-weight: 700;
+  letter-spacing: -1px;
+}
+.type-display-l {
+  font-family: 'Space Mono', 'Courier New', monospace;
+  font-size: 34px; line-height: 42px; font-weight: 700;
+  letter-spacing: -0.3px;
+}
+.type-h1  { font-family: 'Space Mono', 'Courier New', monospace; font-size: 26px; line-height: 34px; font-weight: 700; }
+.type-h2  { font-family: 'Space Mono', 'Courier New', monospace; font-size: 20px; line-height: 28px; font-weight: 700; }
+.type-h3  { font-family: 'Space Mono', 'Courier New', monospace; font-size: 16px; line-height: 24px; font-weight: 700; }
+.type-body-lg { font-size: 16px; line-height: 25px; }
+.type-body    { font-size: 14px; line-height: 22px; }
+.type-small   { font-size: 12px; line-height: 18px; }
+.type-label   { font-size: 12px; line-height: 16px; font-weight: 500; }
+
+/* ─── Scrollbars ─────────────────────────────────────────────── */
+::-webkit-scrollbar            { width: 5px; height: 5px; }
+::-webkit-scrollbar-track      { background: transparent; }
+::-webkit-scrollbar-thumb      { background: #D9D6CD; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover{ background: #A9AB9F; }
+
+/* ─── Focus ──────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid #66765C;
+  outline-offset: 2px;
+}
+
+/* ─── Pixel art (game world – untouched) ─────────────────────── */
+.pixel-art {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.pixel-label {
+  font-family: monospace;
+  font-size: 7px;
+  line-height: 1.4;
+  letter-spacing: 0.5px;
+  text-shadow: 1px 1px 0 #0F1821;
+}
+
+.canvas-walkable { cursor: crosshair; }
+
+/* ─── Animations ─────────────────────────────────────────────── */
+.fade-in { animation: fadeIn 0.18s ease-out; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes walkBounce {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-2px); }
+}
+
+@keyframes idleFloat {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-1px); }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+@keyframes shimmer {
+  0%   { opacity: 0.6; }
+  50%  { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+.animate-walk       { animation: walkBounce 0.35s ease-in-out infinite; }
+.animate-idle       { animation: idleFloat 2s ease-in-out infinite; }
+.animate-pulse-soft { animation: pulse-soft 2s ease-in-out infinite; }
+.animate-shimmer    { animation: shimmer 3s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-walk, .animate-idle, .animate-pulse-soft, .animate-shimmer, .fade-in {
+    animation: none;
+  }
+}
