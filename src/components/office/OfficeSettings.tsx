@@ -1,8 +1,12 @@
 import React, { useState } from 'react'
 import type { Office, Membership, User } from '../../types'
+import { OFFICE_DESIGNS, layoutOfOffice } from '../../data/officeMap'
 import { Copy, Check, LogOut } from 'lucide-react'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
+import Tabs from '../ui/Tabs'
+import { Field, TextInput } from '../ui/Field'
+import Badge from '../ui/Badge'
 
 interface OfficeSettingsProps {
   isOpen: boolean
@@ -16,11 +20,7 @@ interface OfficeSettingsProps {
 
 type SettingsTab = 'general' | 'members' | 'theme'
 
-const ROLE_STYLE: Record<string, string> = {
-  owner: 'bg-clay-soft text-clay border-clay/20',
-  admin: 'bg-olive-soft text-olive border-olive/20',
-  member: 'bg-muted text-ink-2 border-border',
-}
+const ROLE_TONE = { owner: 'clay', admin: 'olive', member: 'muted' } as const
 
 export default function OfficeSettings({
   isOpen, onClose, office, memberships, currentUser, onRename, onLeave
@@ -31,114 +31,87 @@ export default function OfficeSettings({
   const isOwner = office.ownerId === currentUser.id
 
   const copyInvite = () => {
-    navigator.clipboard.writeText(`https://virtualoffice.app/join/${office.inviteCode}`)
+    navigator.clipboard.writeText(`https://sidedesk.app/join/${office.inviteCode}`)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Office Settings" size="md">
-      {/* Tab bar */}
-      <div className="flex gap-4 mb-5 border-b border-border -mx-5 px-5">
-        {(['general', 'members', 'theme'] as SettingsTab[]).map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`pb-2.5 text-[13px] font-medium capitalize transition-colors border-b-2 -mb-px
-              focus:outline-none focus-visible:ring-2 focus-visible:ring-focus
-              ${tab === t ? 'border-olive text-ink' : 'border-transparent text-ink-2 hover:text-ink'}`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
+    <Modal isOpen={isOpen} onClose={onClose} title="Office settings" description="Name, people, and the room chosen for this office." size="md">
+      <Tabs
+        label="Office settings"
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { id: 'general', label: 'General' },
+          { id: 'members', label: 'Members' },
+          { id: 'theme', label: 'Theme' },
+        ]}
+      />
 
       {tab === 'general' && (
-        <div className="space-y-4">
-          <div>
-            <label className="type-label text-ink-2 block mb-1.5">Office Name</label>
+        <div className="mt-5 space-y-5" role="tabpanel" id="panel-general">
+          <Field label="Office name" htmlFor="office-name">
             <div className="flex gap-2">
-              <input
-                value={name}
-                onChange={e => setName(e.target.value)}
-                disabled={!isOwner}
-                className="flex-1 h-9 bg-canvas border border-border rounded-[6px] px-3 text-[13px] text-ink
-                  focus:outline-none focus:border-olive focus:ring-1 focus:ring-olive/30 disabled:opacity-50 disabled:bg-muted"
-              />
+              <TextInput id="office-name" value={name} onChange={e => setName(e.target.value)} disabled={!isOwner} />
               {isOwner && (
-                <Button variant="secondary" size="sm" onClick={() => { onRename(name); onClose() }}>
-                  Save
-                </Button>
+                <Button variant="secondary" onClick={() => { onRename(name); onClose() }}>Save</Button>
               )}
             </div>
-          </div>
+          </Field>
 
-          <div>
-            <label className="type-label text-ink-2 block mb-1.5">Invite Link</label>
+          <Field label="Invite link" hint="Anyone with this link can join from the dashboard.">
             <div className="flex gap-2">
-              <div className="flex-1 bg-muted border border-border rounded-[6px] px-3 py-2 type-small text-ink-2 font-mono truncate">
-                virtualoffice.app/join/{office.inviteCode}
+              <div className="flex h-11 min-w-0 flex-1 items-center truncate rounded-[10px] border border-border bg-muted px-3 text-[14px] text-ink-2">
+                sidedesk.app/join/{office.inviteCode}
               </div>
               <Button
                 variant={copied ? 'selected' : 'secondary'}
-                size="sm"
                 onClick={copyInvite}
-                icon={copied ? <Check size={13} strokeWidth={2} /> : <Copy size={13} strokeWidth={1.75} />}
+                icon={copied ? <Check size={16} strokeWidth={2} /> : <Copy size={16} strokeWidth={1.75} />}
               >
                 {copied ? 'Copied' : 'Copy'}
               </Button>
             </div>
-          </div>
+          </Field>
 
-          <div className="pt-3 border-t border-border">
+          <div className="border-t border-border pt-4">
             <Button
               variant="destructive"
-              size="sm"
-              icon={<LogOut size={13} strokeWidth={1.75} />}
+              icon={<LogOut size={16} strokeWidth={1.75} />}
               onClick={() => { if (window.confirm('Leave this office?')) onLeave() }}
             >
-              Leave Office
+              Leave office
             </Button>
           </div>
         </div>
       )}
 
       {tab === 'members' && (
-        <div className="space-y-0.5 max-h-64 overflow-y-auto">
-          {memberships.map(m => (
-            <div key={m.userId} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted transition-colors">
-              <div className="type-body text-ink">
-                {m.userId === currentUser.id ? 'You' : m.userId.replace('demo_', 'Member ')}
-              </div>
-              <span className={`type-small px-2 py-0.5 rounded border ${ROLE_STYLE[m.role]}`}>
-                {m.role}
-              </span>
+        <div className="mt-4 max-h-64 space-y-1 overflow-y-auto" role="tabpanel" id="panel-members">
+          {memberships.map(membership => (
+            <div key={membership.userId} className="flex items-center justify-between rounded-[10px] px-2 py-2 hover:bg-muted">
+              <p className="text-[15px] text-ink">
+                {membership.userId === currentUser.id ? 'You' : membership.userId.replace('demo_', 'Member ')}
+              </p>
+              <Badge tone={ROLE_TONE[membership.role]}>{membership.role}</Badge>
             </div>
           ))}
         </div>
       )}
 
       {tab === 'theme' && (
-        <div className="space-y-2">
-          {(['cosy_studio', 'creative_loft', 'quiet_library'] as const).map(theme => (
-            <button
-              key={theme}
-              disabled={!isOwner}
-              className={`w-full p-3 rounded-lg border text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus
-                ${office.theme === theme ? 'border-olive/40 bg-olive-soft' : 'border-border hover:border-border-strong'}
-                ${!isOwner ? 'opacity-40 cursor-not-allowed' : ''}`}
-            >
-              <p className={`type-label text-[13px] ${office.theme === theme ? 'text-olive' : 'text-ink'}`}>
-                {theme.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-              </p>
-              <p className="type-small text-ink-2 mt-0.5">
-                {theme === 'cosy_studio' ? 'Warm oak floors, warm lighting' :
-                  theme === 'creative_loft' ? 'Industrial, open, bright' :
-                  'Quiet, minimal, focused'}
-              </p>
-            </button>
-          ))}
-          {!isOwner && <p className="type-small text-ink-3 text-center pt-1">Only the owner can change the theme</p>}
+        <div className="mt-5 rounded-[14px] border border-border p-4" role="tabpanel" id="panel-theme">
+          {(() => {
+            const room = OFFICE_DESIGNS.find(design => design.id === layoutOfOffice(office))
+            return (
+              <>
+                <p className="text-[16px] font-medium text-ink">{room?.emoji} {room?.name}</p>
+                <p className="mt-1 text-[14px] leading-6 text-ink-2">{room?.desc}</p>
+                <p className="mt-3 text-[14px] text-ink-2">This room was chosen when the office was created.</p>
+              </>
+            )
+          })()}
         </div>
       )}
     </Modal>

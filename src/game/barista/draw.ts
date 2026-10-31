@@ -52,10 +52,10 @@ const BEAN = '#6B3A28'
 
 const CAM = {
   counter: { x: 0, y: 0, z: 1 },
-  grind: { x: 96, y: 24, z: 2 },
-  machine: { x: 0, y: 40, z: 2 },
-  steam: { x: 136, y: 24, z: 2 },
-  kettle: { x: 148, y: 32, z: 2 },
+  grind: { x: 0, y: 0, z: 1 },
+  machine: { x: 0, y: 0, z: 1 },
+  steam: { x: 0, y: 0, z: 1 },
+  kettle: { x: 0, y: 0, z: 1 },
 }
 
 let cam = { x: 0, y: 0, z: 1 }
@@ -82,12 +82,13 @@ export function drawStation(ctx: CanvasRenderingContext2D, scene: StationScene) 
     return
   }
   const target = CAM[scene.camera]
-  if (scene.reduced || target.z !== cam.z) cam = { ...target }
+  if (scene.reduced) cam = { ...target }
   else {
-    cam.x += (target.x - cam.x) * 0.2
-    cam.y += (target.y - cam.y) * 0.2
+    cam.x += (target.x - cam.x) * 0.16
+    cam.y += (target.y - cam.y) * 0.16
+    cam.z += (target.z - cam.z) * 0.16
   }
-  const z = cam.z
+  const z = cam.z < 1.05 ? 1 : cam.z
   ctx.setTransform(z, 0, 0, z, -Math.round(cam.x * z), -Math.round(cam.y * z))
   drawWorld(ctx, scene)
   ctx.setTransform(1, 0, 0, 1, 0, 0)
@@ -196,11 +197,12 @@ function drawWorld(ctx: CanvasRenderingContext2D, scene: StationScene) {
     }
   }
   if (scene.holding && !scene.reduced) {
-    for (let i = 0; i < 4; i++) {
-      const y = 78 + ((scene.tick * 3 + i * 6) % 18)
-      pix(ctx, 132 + (i % 2) * 4, y, 2, 2, BEAN)
+    for (let i = 0; i < 5; i++) {
+      const y = 86 + ((scene.tick * 3 + i * 5) % 16)
+      pix(ctx, 130 + (i % 3) * 4, y, 2, 2, i % 2 ? BEAN : '#5C3A28')
     }
   }
+  stationMark(ctx, scene)
   if (scene.running && scene.phase === 'steam' && !scene.reduced) {
     const rise = scene.tick % 10
     pix(ctx, 186, 46 - rise, 2, 2, 'rgba(255,255,255,0.9)')
@@ -224,38 +226,43 @@ function miniCup(ctx: CanvasRenderingContext2D, x: number, y: number) {
 }
 
 function drawMachine(ctx: CanvasRenderingContext2D, scene: StationScene) {
-  pix(ctx, 28, 102, 8, 6, INK)
-  pix(ctx, 78, 102, 8, 6, INK)
-  pix(ctx, 18, 96, 84, 7, '#1B2822')
-  for (let x = 22; x < 96; x += 6) pix(ctx, x, 94, 3, 3, '#31443A')
-  pix(ctx, 22, 40, 76, 56, MACHINE)
-  pix(ctx, 26, 44, 68, 20, MACHINE2)
-  pix(ctx, 34, 26, 48, 16, '#3E5C48')
-  pix(ctx, 38, 30, 40, 6, '#8FB59A')
-  disc(ctx, 40, 70, 7, BRASS)
-  disc(ctx, 40, 70, 3, '#1E2C26')
-  pix(ctx, 54, 62, 8, 6, BRASS)
-  pix(ctx, 66, 62, 8, 6, scene.running && scene.phase === 'pull' ? '#C45A4A' : MACHINE3)
-  pix(ctx, 78, 64, 10, 4, '#1E2C26')
-  pix(ctx, 46, 84, 26, 8, '#243830')
-  pix(ctx, 50, 90, 6, 6, STEEL)
-  pix(ctx, 64, 90, 6, 6, STEEL)
-  pix(ctx, 92, 48, 6, 12, BRASS)
+  const pulling = scene.running && scene.phase === 'pull'
+  pix(ctx, 24, 104, 10, 6, INK)
+  pix(ctx, 82, 104, 10, 6, INK)
+  pix(ctx, 16, 98, 92, 8, '#1B2822')
+  for (let x = 20; x < 102; x += 7) pix(ctx, x, 96, 4, 3, '#31443A')
+  pix(ctx, 20, 38, 84, 60, MACHINE)
+  pix(ctx, 24, 42, 76, 18, MACHINE2)
+  pix(ctx, 32, 22, 52, 18, '#345044')
+  pix(ctx, 38, 26, 28, 8, '#8FB59A')
+  pix(ctx, 70, 26, 8, 8, pulling ? '#C45A4A' : '#7A8F62')
+  disc(ctx, 46, 72, 9, BRASS)
+  disc(ctx, 46, 72, 4, '#1E2C26')
+  pix(ctx, 42, 80, 8, 6, BRASS)
+  pix(ctx, 62, 58, 10, 7, BRASS)
+  pix(ctx, 76, 58, 10, 7, pulling ? '#C45A4A' : MACHINE3)
+  pix(ctx, 90, 60, 8, 5, '#1E2C26')
+  pix(ctx, 40, 84, 32, 10, '#243830')
+  pix(ctx, 46, 90, 7, 8, STEEL)
+  pix(ctx, 60, 90, 7, 8, STEEL)
+  pix(ctx, 98, 46, 6, 16, BRASS)
+  pix(ctx, 96, 60, 4, 8, STEEL2)
 }
 
 function drawGrinder(ctx: CanvasRenderingContext2D, scene: StationScene) {
   const shake = scene.holding && !scene.reduced ? (scene.tick % 2) : 0
-  pix(ctx, 114, 20, 40, 6, '#3A322C')
-  pix(ctx, 118, 26, 32, 12, '#2A2420')
-  pix(ctx, 124, 28, 4, 3, BEAN)
-  pix(ctx, 132, 30, 4, 3, '#8C4A32')
-  pix(ctx, 140, 28, 3, 3, BEAN)
-  pix(ctx, 126, 38, 16, 8, '#5C5348')
-  pix(ctx, 116 + shake, 46, 36, 42, '#4A4038')
-  pix(ctx, 120 + shake, 50, 28, 8, '#6B5E52')
-  disc(ctx, 134, 70, 6, BRASS)
-  disc(ctx, 134, 70, 2, INK)
-  pix(ctx, 128, 86, 14, 8, STEEL)
+  pix(ctx, 112, 16, 44, 8, '#3A322C')
+  pix(ctx, 116, 22, 36, 14, '#2A2420')
+  pix(ctx, 122, 24, 5, 4, BEAN)
+  pix(ctx, 130, 26, 5, 4, '#8C4A32')
+  pix(ctx, 138, 24, 4, 4, BEAN)
+  pix(ctx, 124, 36, 20, 8, '#5C5348')
+  pix(ctx, 114 + shake, 44, 40, 40, '#4A4038')
+  pix(ctx, 118 + shake, 48, 32, 10, '#6B5E52')
+  disc(ctx, 134, 68, 7, BRASS)
+  disc(ctx, 134, 68, 3, INK)
+  pix(ctx, 126, 82, 16, 6, STEEL)
+  pix(ctx, 130, 88, 8, 6, '#3A322C')
 }
 
 function drawWand(ctx: CanvasRenderingContext2D, scene: StationScene) {
@@ -332,8 +339,10 @@ function drawCounterCup(ctx: CanvasRenderingContext2D, x: number, y: number, fil
   pix(ctx, x + 18, y + 11, 3, 2, CUP2)
   const h = Math.floor(Math.min(1, fill) * 8)
   if (h) {
-    pix(ctx, x + 3, y + 12 - h, 14, h, COFFEE)
-    if (h > 3) pix(ctx, x + 3, y + 12 - h, 14, 2, CREMA)
+    const ideal = scene.progress >= 0.4 && scene.progress <= 0.75
+    const color = scene.phase === 'pull' && scene.progress > 0.75 ? '#2A1814' : scene.phase === 'pull' && scene.progress < 0.4 ? '#A68456' : COFFEE
+    pix(ctx, x + 3, y + 12 - h, 14, h, color)
+    if (h > 3 && (scene.phase !== 'pull' || ideal)) pix(ctx, x + 3, y + 12 - h, 14, 2, CREMA)
   }
   if (scene.sprinkle) {
     pix(ctx, x + 6, y + 4, 2, 2, BEAN)
@@ -365,39 +374,67 @@ function drawTopCup(ctx: CanvasRenderingContext2D, scene: StationScene) {
 
 function drawResult(ctx: CanvasRenderingContext2D, scene: StationScene) {
   pix(ctx, 0, 0, W, 108, '#F3E6D0')
+  pix(ctx, 0, 0, W, 18, '#E7D3B5')
+  shelfCups(ctx)
   pix(ctx, 0, 108, W, 52, WOOD2)
   pix(ctx, 0, 108, W, 4, WOOD3)
   for (let x = 0; x < W; x += 14) pix(ctx, x, 112, 1, 48, WOOD)
   const stars = scene.stars ?? 3
-  if (scene.drink === 'latte' || scene.drink === 'flat_white') {
-    disc(ctx, 128, 58, 44, CUP)
-    disc(ctx, 128, 58, 36, '#FFFDF8')
-    disc(ctx, 128, 56, 28, COFFEE)
-    disc(ctx, 128, 54, 28, '#5C3828')
-    if (scene.art === 'heart' || stars >= 4) heart(ctx, 128, 48, stars >= 5 ? 6 : 5, MILK)
-    else if (scene.art === 'tulip') tulip(ctx, 128, 66)
-    else if (scene.art === 'rosetta') rosetta(ctx, 128, 68)
-    else swirl(ctx, 128, 68, [0.28, 0.62, 0.4])
-  } else if (scene.drink === 'cappuccino') {
-    heroSide(ctx, 72, 22, COFFEE, false, true)
-    if (scene.topping === 'cocoa') {
-      pix(ctx, 100, 50, 4, 3, BEAN)
-      pix(ctx, 116, 52, 3, 3, BEAN)
-      pix(ctx, 130, 50, 4, 3, '#8C6244')
+  const x = 68
+  const y = 28
+  if (scene.drink === 'espresso') heroSide(ctx, x, y, stars >= 4 ? COFFEE : '#2A1814', stars >= 3, false)
+  else if (scene.drink === 'cappuccino') {
+    heroSide(ctx, x, y, COFFEE, false, true)
+    if (scene.topping === 'cocoa' || stars >= 4) {
+      pix(ctx, x + 36, y + 30, 4, 3, BEAN)
+      pix(ctx, x + 52, y + 32, 3, 3, '#8C6244')
+      pix(ctx, x + 66, y + 30, 4, 3, BEAN)
     }
-  } else if (scene.drink === 'espresso') {
-    heroSide(ctx, 72, 22, COFFEE, true, false)
+  } else if (scene.drink === 'latte' || scene.drink === 'flat_white') {
+    heroSide(ctx, x, y, COFFEE, false, true)
+    if (scene.art === 'heart' || stars >= 4) heart(ctx, x + 52, y + 30, stars >= 5 ? 3 : 2, '#F6E7C1')
+    else if (scene.art === 'tulip') pix(ctx, x + 44, y + 30, 16, 4, MILK)
+    else if (scene.art === 'rosetta') pix(ctx, x + 40, y + 31, 24, 3, MILK)
+    else pix(ctx, x + 46, y + 32, 12, 3, '#E7D3B5')
   } else if (scene.drink === 'cocoa') {
-    heroSide(ctx, 72, 22, '#6B3A28', false, false)
-    drawTopping(ctx, 108, 34, 3, scene.topping)
+    heroSide(ctx, x, y, '#6B3A28', false, false)
+    drawTopping(ctx, x + 40, y + 26, 3, scene.topping)
   } else {
-    heroSide(ctx, 72, 22, teaColor(scene.tea, 0.8), false, false)
+    heroSide(ctx, x, y, teaColor(scene.tea, 0.8), false, false)
+    pix(ctx, x + 50, y + 18, 3, 18, STEEL2)
   }
   if (!scene.reduced) {
-    const rise = scene.tick % 14
-    pix(ctx, 118, 16 - (rise % 10), 3, 3, 'rgba(255,255,255,0.85)')
-    pix(ctx, 140, 12 - ((rise + 6) % 10), 3, 3, 'rgba(255,255,255,0.6)')
+    const rise = scene.tick % 16
+    pix(ctx, 118, 22 - (rise % 8), 2, 2, 'rgba(255,255,255,0.9)')
+    pix(ctx, 136, 18 - ((rise + 5) % 8), 2, 2, 'rgba(255,255,255,0.65)')
   }
+  if (stars >= 5 && !scene.reduced && scene.tick % 20 < 8) {
+    pix(ctx, 96, 36, 2, 2, BRASS)
+    pix(ctx, 158, 40, 2, 2, BRASS)
+  }
+}
+
+function stationMark(ctx: CanvasRenderingContext2D, scene: StationScene) {
+  const box = focusFor(scene.phase)
+  if (!box) return
+  const c = '#66765C'
+  const { x, y, w, h } = box
+  pix(ctx, x, y, 8, 1, c)
+  pix(ctx, x, y, 1, 8, c)
+  pix(ctx, x + w - 8, y, 8, 1, c)
+  pix(ctx, x + w - 1, y, 1, 8, c)
+  pix(ctx, x, y + h - 1, 8, 1, c)
+  pix(ctx, x, y + h - 8, 1, 8, c)
+  pix(ctx, x + w - 8, y + h - 1, 8, 1, c)
+  pix(ctx, x + w - 1, y + h - 8, 1, 8, c)
+}
+
+function focusFor(phase: StationScene['phase']) {
+  if (phase === 'grind') return { x: 110, y: 14, w: 48, h: 84 }
+  if (phase === 'dock' || phase === 'place' || phase === 'pull' || phase === 'dust') return { x: 14, y: 20, w: 96, h: 96 }
+  if (phase === 'steam') return { x: 156, y: 28, w: 58, h: 78 }
+  if (phase === 'heat' || phase === 'stir' || phase === 'top' || phase === 'leaf' || phase === 'kettle' || phase === 'steep') return { x: 154, y: 36, w: 92, h: 72 }
+  return null
 }
 
 function heroSide(ctx: CanvasRenderingContext2D, x: number, y: number, fill: string, crema: boolean, foam: boolean) {

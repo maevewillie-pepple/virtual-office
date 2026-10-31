@@ -55,8 +55,8 @@ body {
   background-color: #F7F5EF;
   color: #30352F;
   font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
-  font-size: 14px;
-  line-height: 22px;
+  font-size: 16px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
@@ -85,10 +85,16 @@ body {
 .type-h1  { font-family: 'Space Mono', 'Courier New', monospace; font-size: 26px; line-height: 34px; font-weight: 700; }
 .type-h2  { font-family: 'Space Mono', 'Courier New', monospace; font-size: 20px; line-height: 28px; font-weight: 700; }
 .type-h3  { font-family: 'Space Mono', 'Courier New', monospace; font-size: 16px; line-height: 24px; font-weight: 700; }
-.type-body-lg { font-size: 16px; line-height: 25px; }
-.type-body    { font-size: 14px; line-height: 22px; }
-.type-small   { font-size: 12px; line-height: 18px; }
-.type-label   { font-size: 12px; line-height: 16px; font-weight: 500; }
+.type-body-lg { font-size: 16px; line-height: 1.5; }
+.type-body    { font-size: 16px; line-height: 1.5; }
+.type-small   { font-size: 14px; line-height: 1.45; }
+.type-label   { font-size: 14px; line-height: 1.4; font-weight: 500; }
+
+/* Stamp buttons: the shadow is a variable so the press can clear it. */
+.btn-stamp { box-shadow: var(--btn-shadow, none); }
+.btn-stamp:hover:not(:disabled) { transform: translate(1px, 1px); }
+.btn-stamp:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
+.btn-stamp:disabled { transform: none; box-shadow: none; }
 
 /* ─── Scrollbars ─────────────────────────────────────────────── */
 ::-webkit-scrollbar            { width: 5px; height: 5px; }

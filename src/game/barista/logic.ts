@@ -1,4 +1,5 @@
 import type { CafeDrink, LatteArt } from '../../types'
+import { publishBarista } from '../../remote/sync'
 
 export interface DrinkRecipe {
   id: CafeDrink
@@ -246,6 +247,7 @@ export function recordDrink(drink: CafeDrink, stars: number, art?: LatteArt) {
     }
   }
   localStorage.setItem(STATS_KEY, JSON.stringify(stats))
+  void publishBarista(stats)
   return { stats, fresh }
 }
 

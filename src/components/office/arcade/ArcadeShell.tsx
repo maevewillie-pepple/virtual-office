@@ -6,6 +6,7 @@ import MemoryGame from './MemoryGame'
 import PoolGame from './PoolGame'
 import DailyWord from './DailyWord'
 import Scoreboard, { type ArcadePlayer } from './Scoreboard'
+import Button from '../../ui/Button'
 
 type View = 'launcher' | ArcadeGame | 'scores'
 
@@ -90,12 +91,12 @@ export default function ArcadeShell({
         aria-label={title}
         className={`flex max-h-[calc(100%-0.5rem)] w-full flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-2xl ${view === 'pool' ? 'max-w-[760px]' : view === 'memory' ? 'max-w-[560px]' : 'max-w-[520px]'}`}
       >
-        <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
           {view !== 'launcher' && (
-            <button type="button" className="text-[12px] text-ink-3 hover:text-ink" onClick={leave}>Arcade</button>
+            <button type="button" className="text-[14px] text-ink-2 hover:text-ink" onClick={leave}>Arcade</button>
           )}
-          <h2 className="text-[14px] font-semibold text-ink">{title}</h2>
-          <button type="button" className="ml-auto flex h-8 w-8 items-center justify-center rounded-md text-ink-2 hover:bg-muted" aria-label="Close arcade" onClick={leave}>
+          <h2 className="text-[18px] font-semibold text-ink">{title}</h2>
+          <button type="button" className="ml-auto flex h-9 w-9 items-center justify-center rounded-[10px] text-ink-2 hover:bg-muted" aria-label="Close arcade" onClick={leave}>
             <X size={16} />
           </button>
         </header>
@@ -105,14 +106,14 @@ export default function ArcadeShell({
               {GAMES.map(game => (
                 <button key={game.id} type="button" onClick={() => { setDirty(false); setView(game.id) }} className="rounded-lg border border-border bg-canvas p-3 text-left hover:border-olive/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                   <Preview id={game.id} />
-                  <span className="mt-2 block text-[14px] font-medium text-ink">{game.title}</span>
-                  <span className="mt-0.5 block text-[12px] leading-4 text-ink-2">{game.blurb}</span>
-                  <span className="mt-1 block text-[11px] uppercase tracking-wide text-ink-3">{game.mode}{best(game.id) ? ` · ${best(game.id)}` : ''}</span>
+                  <span className="mt-2 block text-[16px] font-medium text-ink">{game.title}</span>
+                  <span className="mt-0.5 block text-[14px] leading-5 text-ink-2">{game.blurb}</span>
+                  <span className="mt-1 block text-[13px] text-ink-2">{game.mode}{best(game.id) ? ` · ${best(game.id)}` : ''}</span>
                 </button>
               ))}
-              <button type="button" onClick={() => setView('scores')} className="rounded-lg border border-border px-3 py-2 text-left text-[13px] text-ink hover:bg-muted sm:col-span-2">Arcade scores</button>
+              <button type="button" onClick={() => setView('scores')} className="rounded-[10px] border border-border px-3 py-3 text-left text-[15px] text-ink hover:bg-muted sm:col-span-2">Arcade scores</button>
               {isOwner && (
-                <label className="flex items-center gap-2 text-[12px] text-ink-2 sm:col-span-2">
+                <label className="flex items-center gap-2 text-[14px] text-ink-2 sm:col-span-2">
                   <input type="checkbox" checked={doc.leaderboardPublic} onChange={event => setDoc(setLeaderboardPublic(officeId, event.target.checked))} />
                   Show office rankings
                 </label>
@@ -131,11 +132,11 @@ export default function ArcadeShell({
           {view === 'scores' && <Scoreboard doc={doc} players={players} game={scoreGame} onGame={setScoreGame} mine={player.id} />}
         </div>
         {confirm && (
-          <div className="border-t border-border px-3 py-2">
-            <p className="text-[13px] text-ink">Leave this game? The current run will not be saved.</p>
-            <div className="mt-2 flex justify-end gap-2">
-              <button type="button" className="h-8 rounded-md border border-border px-3 text-[12px]" onClick={() => setConfirm(false)}>Keep playing</button>
-              <button type="button" className="h-8 rounded-md bg-olive-soft px-3 text-[12px] text-olive" onClick={() => { setConfirm(false); setDirty(false); setView('launcher') }}>Leave</button>
+          <div className="border-t border-border bg-canvas px-4 py-3">
+            <p className="text-[14px] text-ink">Leave this game? The current run will not be saved.</p>
+            <div className="mt-3 flex justify-end gap-2">
+              <Button variant="secondary" size="sm" onClick={() => setConfirm(false)}>Keep playing</Button>
+              <Button size="sm" onClick={() => { setConfirm(false); setDirty(false); setView('launcher') }}>Leave</Button>
             </div>
           </div>
         )}

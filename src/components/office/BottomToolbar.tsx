@@ -84,8 +84,18 @@ export default function BottomToolbar({
     <>
       {/* Focus panel */}
       {panel === 'focus' && !focusSession && (
-        <div className={panelBase}>
-          <p className="type-label text-ink mb-3 text-center">Start a focus session</p>
+        <div className={panelBase} role="dialog" aria-label="Start a focus session">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-[16px] font-medium text-ink">Start a focus session</p>
+            <button
+              type="button"
+              onClick={() => setPanel(null)}
+              aria-label="Close"
+              className="rounded-md p-1 text-ink-3 hover:bg-muted hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              <X size={14} strokeWidth={1.75} />
+            </button>
+          </div>
 
           {/* Topic input */}
           <input
@@ -93,8 +103,9 @@ export default function BottomToolbar({
             value={topic}
             onChange={e => setTopic(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && topic && e.preventDefault()}
-            placeholder="What are you working on? (optional)"
-            className="w-full px-3 py-2 mb-3 rounded-[6px] border border-border bg-canvas text-[12px] text-ink placeholder:text-ink-3
+            placeholder="What are you working on?"
+            aria-label="Focus topic"
+            className="w-full px-3 py-2 mb-3 rounded-[10px] border border-border bg-canvas text-[15px] text-ink placeholder:text-ink-3
               focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
             maxLength={60}
           />
@@ -109,7 +120,7 @@ export default function BottomToolbar({
                   setPanel(null)
                   setTopic('')
                 }}
-                className="flex-1 py-2 rounded-[6px] border border-border bg-canvas text-[13px] font-medium text-ink
+                className="flex-1 py-2 rounded-[10px] border border-border bg-canvas text-[15px] font-medium text-ink
                   hover:bg-olive-soft hover:border-olive/40 hover:text-olive transition-all
                   focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
               >
@@ -128,15 +139,13 @@ export default function BottomToolbar({
               placeholder="Custom (min)"
               min={1}
               max={480}
-              className="flex-1 px-3 py-2 rounded-[6px] border border-border bg-canvas text-[12px] text-ink placeholder:text-ink-3
+              className="flex-1 px-3 py-2 rounded-[10px] border border-border bg-canvas text-[15px] text-ink placeholder:text-ink-3
                 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
             />
             <button
               onClick={handleStartWithCustom}
               disabled={!customMin || isNaN(parseInt(customMin, 10))}
-              className="px-3 py-2 rounded-[6px] border border-border bg-canvas text-[12px] font-medium text-ink
-                hover:bg-olive-soft hover:border-olive/40 hover:text-olive transition-all disabled:opacity-40
-                focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              className="px-3 py-2 rounded-[10px] bg-olive text-[15px] font-medium text-surface hover:bg-[#55664d] disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
             >
               Go
             </button>
@@ -279,12 +288,13 @@ export default function BottomToolbar({
         <button
           onClick={onOpenProfile}
           className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-muted transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-          aria-label="My profile"
+          aria-label="Open dashboard"
+          title="Dashboard"
         >
           <div className="w-5 h-5 rounded-full overflow-hidden border border-border">
             <AvatarSprite config={currentUser.avatar} status={currentUser.status} name={currentUser.name} size={20} />
           </div>
-          <span className="text-[12px] text-ink-2">{currentUser.name.split(' ')[0]}</span>
+          <span className="text-[14px] text-ink-2">Dashboard</span>
         </button>
       </div>
     </>
@@ -303,7 +313,7 @@ function ToolBtn({ icon, label, active, onClick, activeClass = 'text-olive' }: T
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-medium transition-colors
+      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-[10px] text-[14px] font-medium transition-colors
         focus:outline-none focus-visible:ring-2 focus-visible:ring-focus
         ${active
           ? `bg-olive-soft ${activeClass}`

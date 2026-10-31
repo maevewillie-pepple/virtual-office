@@ -1,5 +1,4 @@
 import { useEffect, useRef, type CSSProperties } from 'react'
-import { ArrowRight } from 'lucide-react'
 import type { AvatarConfig } from '../../types'
 import Button from '../ui/Button'
 import { demoAvatars } from '../../data/mockData'
@@ -18,8 +17,6 @@ import {
 
 interface LandingScreenProps {
   onCreateOffice: () => void
-  onJoinOffice: () => void
-  onSignIn: () => void
 }
 
 type DrawFn = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) => void
@@ -104,27 +101,16 @@ const PIECES: { draw: DrawFn; size: number; style: CSSProperties }[] = [
   { draw: drawArcadeMachine, size: 72, style: { bottom: '14%', right: '8%', animationDelay: '0.3s' } },
 ]
 
-export default function LandingScreen({ onCreateOffice, onSignIn }: LandingScreenProps) {
+export default function LandingScreen({ onCreateOffice }: LandingScreenProps) {
   return (
-    <div className="relative h-full w-full overflow-hidden bg-canvas">
-      <header className="absolute top-0 right-0 z-10 px-8 py-6">
-        <button
-          onClick={onSignIn}
-          className="text-[13px] text-ink-2 hover:text-ink transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus flex items-center gap-1"
-        >
-          Sign in <ArrowRight size={14} strokeWidth={1.75} />
-        </button>
-      </header>
-
-      <div className="grid h-full grid-cols-1 items-center md:grid-cols-[minmax(420px,1.25fr)_minmax(260px,0.75fr)]">
+    <div className="relative min-h-[640px] w-full overflow-hidden bg-canvas">
+      <div className="grid min-h-[640px] grid-cols-1 items-center md:grid-cols-[minmax(420px,1.25fr)_minmax(260px,0.75fr)]">
         <section className="px-10 py-16 md:px-16 lg:px-20">
-          <p className="type-label text-ink-3 uppercase tracking-widest mb-5">Virtual Office</p>
-          <h1 className="type-display-xl font-display text-ink">
-            Your own little
+          <p className="mb-5 font-mono text-[13px] font-bold uppercase tracking-[0.18em] text-ink-2">Side desk</p>
+          <h1 className="type-display-xl text-ink">
+            A virtual office
             <br />
-            corner of the
-            <br />
-            <span className="text-clay">internet</span>
+            for <span className="text-clay">real people</span>
           </h1>
           <div className="mt-8">
             <Button size="lg" onClick={onCreateOffice}>Create your office</Button>

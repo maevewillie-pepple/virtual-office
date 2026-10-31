@@ -1,4 +1,4 @@
-import type { OfficeMap, OfficeArtTheme, Tile, TileType, InteractableObject } from '../types'
+import type { OfficeMap, OfficeArtTheme, OfficeTheme, Tile, TileType, InteractableObject } from '../types'
 import { collectInteractables } from '../utils/interactions'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -765,6 +765,15 @@ export const OFFICE_DESIGNS: OfficeDesign[] = [
     build: buildLab,
   },
 ]
+
+export function layoutOfOffice(office: { layout?: string; theme?: OfficeTheme }): OfficeDesignId {
+  if (office.layout && OFFICE_DESIGNS.some(design => design.id === office.layout)) {
+    return office.layout as OfficeDesignId
+  }
+  if (office.theme === 'quiet_library') return 'library'
+  if (office.theme === 'creative_loft') return 'loft'
+  return 'classic'
+}
 
 // ─── BFS pathfinding ──────────────────────────────────────────────────────────
 

@@ -207,8 +207,8 @@ export default function SharedBoard({
     const stillUsed = board.items.some(entry => entry.id !== item.id && !entry.deleted && entry.assetId === item.assetId)
     write(list => list.map(entry => entry.id === item.id ? { ...entry, deleted: true, updatedAt: new Date().toISOString() } : entry))
     if (item.assetId && !stillUsed) {
-      await deleteAsset(item.assetId)
-      await deleteAsset(`${item.assetId}_full`)
+      await deleteAsset(item.assetId, officeId)
+      await deleteAsset(`${item.assetId}_full`, officeId)
     }
     setSelected(null)
   }
@@ -315,8 +315,8 @@ export default function SharedBoard({
     try {
       const prepared = await prepareImage(upload.file)
       const assetId = `img_${Date.now()}`
-      await saveAsset(assetId, prepared.thumb)
-      await saveAsset(`${assetId}_full`, prepared.full)
+      await saveAsset(assetId, prepared.thumb, officeId)
+      await saveAsset(`${assetId}_full`, prepared.full, officeId)
       const center = viewCenter()
       addItem({
         type: 'photo',
@@ -707,6 +707,7 @@ export default function SharedBoard({
                   setDraftPos(null)
                 }}
                 onResize={(w, h) => patch(item.id, { w, h })}
+                officeId={officeId}
                 onText={text => { patch(item.id, { text }, editBase.current[item.id]); setEditingId(null) }}
                 onCaption={caption => { patch(item.id, { caption }, editBase.current[item.id]); setEditingId(null) }}
                 onCancelEdit={() => setEditingId(null)}
@@ -972,7 +973,7 @@ export default function SharedBoard({
 }
 
 function BoardCard({
-  item, fill, ink, selected, editing, x, y, zoom, canChange,
+  item, fill, ink, selected, editing, x, y, zoom, canChange, officeId,
   onSelect, onEdit, onDragStart, onDragMove, onDragEnd, onResize, onText, onCaption, onCancelEdit,
 }: {
   item: BoardItem
@@ -984,6 +985,7 @@ function BoardCard({
   y: number
   zoom: number
   canChange: boolean
+  officeId: string
   onSelect: () => void
   onEdit: () => void
   onDragStart: (event: React.PointerEvent) => void
@@ -1043,7 +1045,7 @@ function BoardCard({
         }}
       >
         {item.type === 'photo' && item.assetId && (
-          <Photo assetId={item.assetId} onOpen={() => setPreview(true)} />
+          <Photo assetId={item.assetId} officeId={officeId} onOpen={() => setPreview(true)} />
         )}
         {item.type === 'shape' && <ShapeBody item={{ ...item, w: width, h: height }} fill={fill} ink={ink} />}
         {item.type === 'drawing' && item.points && (
@@ -1108,7 +1110,7 @@ function BoardCard({
           onPointerDown={startResize}
         />
       )}
-      {preview && item.assetId && <FullPhoto assetId={`${item.assetId}_full`} onClose={() => setPreview(false)} />}
+      {preview && item.assetId && <FullPhoto assetId={`${item.assetId}_full`} officeId={officeId} onClose={() => setPreview(false)} />}
     </article>
   )
 }
@@ -1158,14 +1160,14 @@ function ShapePreview({ draft, kind, fill, ink }: { draft: { x: number; y: numbe
   )
 }
 
-function Photo({ assetId, onOpen }: { assetId: string; onOpen: () => void }) {
-  const url = useAssetUrl(assetId)
+function Photo({ assetId, officeId, onOpen }: { assetId: string; officeId: string; onOpen: () => void }) {
+  const url = useAssetUrl(assetId, officeId)
   if (!url) return <div className="h-[78%] animate-pulse rounded-sm bg-muted" />
   return <img src={url} alt="" className="h-[78%] w-full rounded-[1px] object-cover" onDoubleClick={event => { event.stopPropagation(); onOpen() }} />
 }
 
-function FullPhoto({ assetId, onClose }: { assetId: string; onClose: () => void }) {
-  const url = useAssetUrl(assetId)
+function FullPhoto({ assetId, officeId, onClose }: { assetId: string; officeId: string; onClose: () => void }) {
+  const url = useAssetUrl(assetId, officeId)
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/60 p-6" onPointerDown={event => { event.stopPropagation(); onClose() }}>
       {url && <img src={url} alt="" className="max-h-full max-w-full rounded-md" />}
@@ -1173,12 +1175,12 @@ function FullPhoto({ assetId, onClose }: { assetId: string; onClose: () => void 
   )
 }
 
-function useAssetUrl(id: string) {
+function useAssetUrl(id: string, officeId: string) {
   const [url, setUrl] = useState<string | null>(null)
   useEffect(() => {
     let active = true
     let created = ''
-    loadAsset(id).then(blob => {
+    loadAsset(id, officeId).then(blob => {
       if (!active || !blob) return
       created = URL.createObjectURL(blob)
       setUrl(created)
@@ -1187,7 +1189,7 @@ function useAssetUrl(id: string) {
       active = false
       if (created) URL.revokeObjectURL(created)
     }
-  }, [id])
+  }, [id, officeId])
   return url
 }
 

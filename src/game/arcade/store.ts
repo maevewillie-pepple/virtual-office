@@ -1,3 +1,4 @@
+import { publishArcade } from '../../remote/sync'
 import { answerForDay, isWord, markGuess, puzzleNumber, utcDay, type Mark } from './words'
 
 export type ArcadeGame = 'snake' | 'memory' | 'pool' | 'word'
@@ -175,6 +176,7 @@ function write(officeId: string, doc: ArcadeDoc) {
   merged.leaderboardPublic = doc.leaderboardPublic
   merged.version = Math.max(fresh.version, doc.version) + 1
   try { localStorage.setItem(keyOf(officeId), JSON.stringify(merged)) } catch { /* ignore */ }
+  publishArcade(officeId, merged)
   window.dispatchEvent(new CustomEvent('vo-arcade', { detail: officeId }))
   return merged
 }

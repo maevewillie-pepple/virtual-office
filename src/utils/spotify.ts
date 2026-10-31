@@ -1,4 +1,5 @@
 import type { JamInvitation, OfficeMusicState, SpotifyContent, SpotifyKind, MusicPreferences } from '../types'
+import { publishMusic } from '../remote/sync'
 
 const ID = /^[A-Za-z0-9]{22}$/
 const KINDS = new Set<SpotifyKind>(['track', 'album', 'playlist'])
@@ -185,6 +186,8 @@ export function loadOfficeMusic(key: string): OfficeMusicState {
 export function saveOfficeMusic(key: string, music: OfficeMusicState) {
   const safe = sanitizeOfficeMusic(music)
   try { localStorage.setItem(key, JSON.stringify(safe)) } catch { /* ignore */ }
+  publishMusic(key.slice('vo_office_music_'.length), safe)
+  window.dispatchEvent(new CustomEvent('vo-music', { detail: key }))
   return safe
 }
 

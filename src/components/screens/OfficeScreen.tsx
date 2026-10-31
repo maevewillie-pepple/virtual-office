@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
-import type { Desk, OnlineUser, FocusDuration, Message, SpeechBubble, CarriedItem, InteractableObject, OfficeMusicState, SpotifyContent, MusicPreferences } from '../../types'
+import type { Desk, OnlineUser, FocusDuration, Message, SpeechBubble, CarriedItem, InteractableObject, OfficeMusicState, SpotifyContent, MusicPreferences, Office, User, OfficeMembership } from '../../types'
 import { OFFICE_DESIGNS, type OfficeDesignId } from '../../data/officeMap'
 import {
   demoUsers, demoOffices, demoMemberships, demoMessages,
@@ -13,6 +13,7 @@ import DeskModal from '../office/DeskModal'
 import AvatarPopover from '../office/AvatarPopover'
 import MusicPanel from '../office/MusicPanel'
 import OfficeSettings from '../office/OfficeSettings'
+import TaskBoard from '../office/TaskBoard'
 import FocusHistoryPanel from '../office/FocusHistoryPanel'
 import BookshelfPanel, { type Book } from '../office/BookshelfPanel'
 import MeetingHub from '../office/MeetingHub'
@@ -22,12 +23,19 @@ import BaristaGame from '../office/BaristaGame'
 import { carriedEmoji, carriedShort, isBook, isHeldDrink, isTeaDrink } from '../../game/barista/carry'
 import { readWord } from '../../game/arcade/store'
 import { buildRoomIndex, roomIdAt } from '../../collaboration/rooms'
-import { findLiveMarker, migrateLegacyBoards, subscribeAny } from '../../collaboration/store'
+import { activeSession, findLiveMarker, migrateLegacyBoards, readOfficeBoards, readOfficeDiscussions, subscribeAny, type BoardItem } from '../../collaboration/store'
+import NotificationCentre from '../office/NotificationCentre'
+import { loadNotices, markAllNoticesRead, markNoticeRead, pushNotice, subscribeNotices, type InteractionAction, type OfficeNotice } from '../../office/notices'
 import { seatBesideDesk } from '../../utils/interactions'
 import { PanelRightOpen } from 'lucide-react'
 import { ToastContainer, useToasts } from '../ui/Toast'
 import type { FocusHistoryEntry } from '../../types'
 import { loadMusicPreferences, loadOfficeMusic, parseJamInvite, parseSpotifyContent, saveMusicPreferences, saveOfficeMusic, spotifyKindLabel, spotifyOpenUrl } from '../../utils/spotify'
+import { isRemoteConfigured, isUuid } from '../../remote/client'
+import { claimRemoteDesk, renameRemoteOffice } from '../../remote/account'
+import { loadOfficeMessages, saveReaction, sendOfficeMessage, subscribeOfficeMessages } from '../../remote/messages'
+import { joinPresence, presenceToOnline, type PresencePayload } from '../../remote/presence'
+import { hydrateOffice, hydratePersonal, publishFocus, publishNotes, publishPlants, subscribeOfficeDocs } from '../../remote/sync'
 
 const STORAGE_KEY = 'vo_office_state'
 
@@ -42,14 +50,61 @@ function saveState(state: Record<string, unknown>) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)) } catch {}
 }
 
-export default function OfficeScreen() {
-  const office = demoOffices[0]
-  const currentUser = { ...demoUsers[0] }
-  const savedState = loadState()
+const ROOM_IDS = ['classic', 'library', 'loft', 'studio', 'lab'] as const
 
-  const [designId, setDesignId] = useState<OfficeDesignId>(
-    (savedState?.designId as OfficeDesignId) ?? 'classic'
-  )
+function isRoomId(value: unknown): value is OfficeDesignId {
+  return typeof value === 'string' && (ROOM_IDS as readonly string[]).includes(value)
+}
+
+/** The room is fixed when the office is created. Older offices keep the classic room unless their theme already names one. */
+function roomForOffice(office: Office): OfficeDesignId {
+  if (isRoomId(office.layout)) return office.layout
+  if (office.theme === 'quiet_library') return 'library'
+  if (office.theme === 'creative_loft') return 'loft'
+  return 'classic'
+}
+
+function boardSnippet(item: BoardItem, place: string): string {
+  const text = (item.text || item.caption || '').replace(/\s+/g, ' ').trim().slice(0, 80)
+  let what = text
+  if (item.type === 'photo') what = text ? `Photo · ${text}` : 'A photo'
+  else if (item.type === 'link') what = text || item.href || 'A link'
+  else if (item.type === 'drawing') what = 'A drawing'
+  else if (item.type === 'shape') what = 'A shape'
+  else if (!what) what = 'A note'
+  return place ? `${what} · ${place}` : what
+}
+
+interface OfficeScreenProps {
+  office?: Office
+  account?: User
+  membershipRole?: OfficeMembership
+  onOpenDashboard?: () => void
+  onOfficeUpdated?: (office: Office) => void
+}
+
+export default function OfficeScreen({ office: officeProp, account, membershipRole = 'member', onOpenDashboard, onOfficeUpdated }: OfficeScreenProps = {}) {
+  const office = officeProp ?? demoOffices[0]
+  const live = isRemoteConfigured() && isUuid(office.id) && !!account && isUuid(account.id)
+  const currentUser: User = live && account
+    ? account
+    : {
+      ...demoUsers[0],
+      ...(account ?? {}),
+      id: demoUsers[0].id,
+    }
+  const savedState = loadState()
+  const onsetRoom = roomForOffice(office)
+  const designAdmin = live
+    ? membershipRole === 'owner' || membershipRole === 'admin'
+    : demoMemberships.some(
+      membership => membership.userId === currentUser.id && membership.officeId === office.id && membership.role === 'admin'
+    )
+
+  const [designId, setDesignId] = useState<OfficeDesignId>(() => {
+    if (!designAdmin) return onsetRoom
+    return isRoomId(savedState?.designId) ? savedState.designId : onsetRoom
+  })
   const [showDesignPicker, setShowDesignPicker] = useState(false)
 
   const officeMap = useMemo(() => {
@@ -59,12 +114,29 @@ export default function OfficeScreen() {
   const rooms = useMemo(() => buildRoomIndex(officeMap.tiles), [officeMap])
 
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [messages, setMessages] = useState<Message[]>(demoMessages)
-  const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>(demoOnlineUsers)
+  const [messages, setMessages] = useState<Message[]>(live ? [] : demoMessages)
+  const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>(() =>
+    live
+      ? [{
+        user: currentUser,
+        position: { gridX: savedState?.currentPos?.gridX ?? 2, gridY: savedState?.currentPos?.gridY ?? 3, x: 0, y: 0 },
+        isCurrentUser: true,
+      }]
+      : demoOnlineUsers.map(ou => ou.isCurrentUser ? { ...ou, user: currentUser } : ou)
+  )
+
+  useEffect(() => {
+    setOnlineUsers(prev => prev.map(ou => ou.isCurrentUser ? {
+      ...ou,
+      user: { ...ou.user, name: currentUser.name, email: currentUser.email, avatar: currentUser.avatar },
+    } : ou))
+  }, [currentUser.name, currentUser.email, currentUser.avatar])
   const [desks, setDesks] = useState(() =>
-    officeMap.desks.map((d, i) =>
-      i === 0 ? { ...d, ownerId: currentUser.id, ownerName: 'You', isAvailable: false } : d
-    )
+    live
+      ? officeMap.desks
+      : officeMap.desks.map((d, i) =>
+        i === 0 ? { ...d, ownerId: currentUser.id, ownerName: 'You', isAvailable: false } : d
+      )
   )
   const [currentPos, setCurrentPos] = useState(
     savedState?.currentPos ?? { gridX: 2, gridY: 3 }
@@ -144,6 +216,10 @@ export default function OfficeScreen() {
   const [showMusic, setShowMusic] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
+  const [showTasks, setShowTasks] = useState(false)
+  const [notices, setNotices] = useState<OfficeNotice[]>(() => loadNotices(office.id))
+  const [noticesOpen, setNoticesOpen] = useState(false)
+  const [enterDiscussion, setEnterDiscussion] = useState(false)
 
   const { toasts, addToast, dismiss } = useToasts()
 
@@ -151,13 +227,117 @@ export default function OfficeScreen() {
     const onStorage = (event: StorageEvent) => {
       if (event.key === musicKey) setOfficeMusic(loadOfficeMusic(musicKey))
     }
+    const onMusic = (event: Event) => {
+      if ((event as CustomEvent<string>).detail === musicKey) setOfficeMusic(loadOfficeMusic(musicKey))
+    }
     window.addEventListener('storage', onStorage)
-    return () => window.removeEventListener('storage', onStorage)
+    window.addEventListener('vo-music', onMusic)
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      window.removeEventListener('vo-music', onMusic)
+    }
   }, [musicKey])
 
-  const musicRole = memberships.find(m => m.userId === currentUser.id)?.role
+  const musicRole = live ? membershipRole : memberships.find(m => m.userId === currentUser.id)?.role
   const canEditMusic = musicRole === 'owner' || musicRole === 'admin'
   const canManageJam = canEditMusic || officeMusic.jam?.sharedById === currentUser.id
+
+  useEffect(() => {
+    setNotices(loadNotices(office.id))
+    setNoticesOpen(false)
+    return subscribeNotices(office.id, () => setNotices(loadNotices(office.id)))
+  }, [office.id])
+
+  const presenceRef = useRef<ReturnType<typeof joinPresence> | null>(null)
+  const presencePayload = useCallback((): PresencePayload => ({
+    user: currentUser,
+    gridX: currentPos.gridX,
+    gridY: currentPos.gridY,
+    status: onBreak ? 'on_break' : focusSession ? 'focusing' : 'online',
+    seated: !!seatedSeatId,
+    onBreak,
+    carried: carriedItem,
+    focusEndsAt: focusSession?.endsAt ?? null,
+    focusTopic: focusSession?.topic ?? null,
+    focusPaused: !!focusSession?.paused,
+  }), [currentUser, currentPos.gridX, currentPos.gridY, onBreak, focusSession, seatedSeatId, carriedItem])
+
+  useEffect(() => {
+    if (!live) return
+    let stopMessages = () => {}
+    let stopDocs = () => {}
+    const room = joinPresence(office.id, presencePayload(), people => {
+      const mine = currentUser.id
+      const next = people.map(person => presenceToOnline(person, person.user.id === mine))
+      setOnlineUsers(next.some(person => person.isCurrentUser) ? next : [...next, presenceToOnline(presencePayload(), true)])
+    })
+    presenceRef.current = room
+    void loadOfficeMessages(office.id, currentUser.id).then(loaded => {
+      setMessages(loaded.messages)
+      setDmThreads(loaded.threads)
+    }).catch(() => {})
+    stopMessages = subscribeOfficeMessages(office.id, message => {
+      if (message.isDM && message.authorId !== currentUser.id && message.dmToUserId !== currentUser.id) return
+      if (message.isDM) {
+        const other = message.authorId === currentUser.id ? message.dmToUserId : message.authorId
+        if (!other) return
+        const line = {
+          id: message.id,
+          from: message.authorId === currentUser.id ? 'You' : message.authorName,
+          text: message.content,
+          ts: new Date(message.timestamp).getTime(),
+        }
+        setDmThreads(prev => {
+          const list = prev[other] ?? []
+          if (list.some(item => item.id === line.id)) return prev
+          return { ...prev, [other]: [...list, line] }
+        })
+        return
+      }
+      setMessages(prev => {
+        const index = prev.findIndex(item => item.id === message.id)
+        if (index === -1) return [...prev, message]
+        const next = [...prev]
+        next[index] = message
+        return next
+      })
+    })
+    const reloadShared = () => {
+      setOfficeMusic(loadOfficeMusic(musicKey))
+      setNotices(loadNotices(office.id))
+      try {
+        const raw = localStorage.getItem('vo_focus_history')
+        if (raw) setFocusHistory(JSON.parse(raw) as FocusHistoryEntry[])
+      } catch { /* ignore */ }
+    }
+    void hydrateOffice(office.id).then(reloadShared).catch(() => {})
+    void hydratePersonal(currentUser.id).then(reloadShared).catch(() => {})
+    stopDocs = subscribeOfficeDocs(office.id, reloadShared)
+    return () => {
+      room.leave()
+      presenceRef.current = null
+      stopMessages()
+      stopDocs()
+    }
+  }, [live, office.id, currentUser.id, musicKey])
+
+  useEffect(() => {
+    presenceRef.current?.update(presencePayload())
+  }, [presencePayload])
+
+  const recordInteraction = useCallback((action: InteractionAction, personId: string, personName: string, detail = '') => {
+    pushNotice(office.id, {
+      id: `act_${action}_${personId}_${Date.now()}`,
+      kind: 'interaction',
+      action,
+      actorId: currentUser.id,
+      actorName: currentUser.name,
+      personId,
+      personName,
+      title: action,
+      detail,
+    })
+  }, [office.id, currentUser.id, currentUser.name])
 
   const notifyMusic = useCallback((message: string) => {
     if (focusSession || musicPrefs.hideNotifications) return
@@ -317,6 +497,7 @@ export default function OfficeScreen() {
         stage = Math.min(3, (all[obj.id] ?? 0) + 1)
         all[obj.id] = stage
         localStorage.setItem(key, JSON.stringify(all))
+        if (live) publishPlants(office.id, designId, all)
       } catch { /* ignore */ }
       const names = ['a sprout', 'growing', 'leafy', 'flourishing']
       addSpeechBubble(currentUser.id, '💧', 'status', 2000)
@@ -359,25 +540,27 @@ export default function OfficeScreen() {
   const handleClaimDesk = useCallback((deskId: string) => {
     setDesks(prev => prev.map(d =>
       d.id === deskId
-        ? { ...d, ownerId: currentUser.id, ownerName: 'You', isAvailable: false }
+        ? { ...d, ownerId: currentUser.id, ownerName: currentUser.name, isAvailable: false }
         : d.ownerId === currentUser.id ? { ...d, ownerId: undefined, ownerName: undefined, isAvailable: true } : d
     ))
+    if (live) void claimRemoteDesk(office.id, deskId)
     addToast('Desk claimed! This is your spot 🪑', 'success')
-  }, [currentUser.id, addToast])
+  }, [currentUser.id, currentUser.name, addToast, live, office.id])
 
   const handleReleaseDesk = useCallback((deskId: string) => {
     setDesks(prev => prev.map(d =>
       d.id === deskId ? { ...d, ownerId: undefined, ownerName: undefined, isAvailable: true } : d
     ))
+    if (live) void claimRemoteDesk(office.id, null)
     addToast('Desk released', 'info')
-  }, [addToast])
+  }, [addToast, live, office.id])
 
   const handleSendMessage = useCallback((content: string) => {
     const newMsg: Message = {
-      id: `msg_${Date.now()}`,
+      id: crypto.randomUUID(),
       officeId: office.id,
       authorId: currentUser.id,
-      authorName: 'You',
+      authorName: live ? currentUser.name : 'You',
       authorAvatar: currentUser.avatar,
       content,
       type: content.startsWith('http') ? 'link' : 'text',
@@ -385,30 +568,25 @@ export default function OfficeScreen() {
       reactions: {},
     }
     setMessages(prev => [...prev, newMsg])
+    if (live) void sendOfficeMessage(newMsg)
     addSpeechBubble(currentUser.id, content, 'chat', 5000)
-  }, [office.id, currentUser, addSpeechBubble])
+  }, [office.id, currentUser, addSpeechBubble, live])
 
   const handleReact = useCallback((messageId: string, emoji: string) => {
     setMessages(prev => prev.map(m => {
       if (m.id !== messageId) return m
       const existing = m.reactions[emoji] || []
       const hasReacted = existing.includes(currentUser.id)
-      return {
-        ...m,
-        reactions: {
-          ...m.reactions,
-          [emoji]: hasReacted
-            ? existing.filter(id => id !== currentUser.id)
-            : [...existing, currentUser.id],
-        },
+      const reactions = {
+        ...m.reactions,
+        [emoji]: hasReacted
+          ? existing.filter(id => id !== currentUser.id)
+          : [...existing, currentUser.id],
       }
+      if (live) void saveReaction(messageId, reactions)
+      return { ...m, reactions }
     }))
-  }, [currentUser.id])
-
-  const saveFocusHistory = useCallback((entries: FocusHistoryEntry[]) => {
-    setFocusHistory(entries)
-    try { localStorage.setItem('vo_focus_history', JSON.stringify(entries)) } catch {}
-  }, [])
+  }, [currentUser.id, live])
 
   const handleStartFocus = useCallback((duration: FocusDuration, topic?: string, shareTopic = true) => {
     if (onBreak) {
@@ -463,6 +641,7 @@ export default function OfficeScreen() {
         setFocusHistory(prev => {
           const next = [...prev, entry]
           try { localStorage.setItem('vo_focus_history', JSON.stringify(next)) } catch {}
+          if (live) void publishFocus(currentUser.id, next)
           return next
         })
         focusStartRef.current = null
@@ -525,7 +704,8 @@ export default function OfficeScreen() {
     const name = onlineUsers.find(u => u.user.id === userId)?.user.name
     addToast(`You waved at ${name}`, 'success', 2000)
     addSpeechBubble(currentUser.id, `👋 ${name?.split(' ')[0] ?? ''}`, 'reaction', 3000)
-  }, [onlineUsers, addToast, addSpeechBubble, currentUser.id])
+    if (name) recordInteraction('wave', userId, name)
+  }, [onlineUsers, addToast, addSpeechBubble, currentUser.id, recordInteraction])
 
   const handleNudge = useCallback((userId: string) => {
     const person = onlineUsers.find(u => u.user.id === userId)
@@ -542,7 +722,8 @@ export default function OfficeScreen() {
     nudgeAt.current[userId] = Date.now()
     addSpeechBubble(currentUser.id, `👋 nudge`, 'reaction', 2500)
     addToast(`You nudged ${person.user.name.split(' ')[0]}`, 'success', 1800)
-  }, [onlineUsers, addToast, addSpeechBubble, currentUser.id])
+    recordInteraction('nudge', userId, person.user.name)
+  }, [onlineUsers, addToast, addSpeechBubble, currentUser.id, recordInteraction])
 
   const handleGiveItem = useCallback((userId: string) => {
     const person = onlineUsers.find(u => u.user.id === userId)
@@ -567,8 +748,9 @@ export default function OfficeScreen() {
     }
     addSpeechBubble(currentUser.id, '🎧 Focus together?', 'status', 3000)
     addToast(`Invited ${person.user.name.split(' ')[0]} to focus`, 'success', 2000)
+    recordInteraction('focus', userId, person.user.name)
     setFocusSignal(n => n + 1)
-  }, [onlineUsers, addToast, addSpeechBubble, currentUser.id])
+  }, [onlineUsers, addToast, addSpeechBubble, currentUser.id, recordInteraction])
 
   useEffect(() => {
     setOnlineUsers(prev => prev.map(u => u.isCurrentUser ? { ...u, brewing: baristaOpen } : u))
@@ -602,13 +784,15 @@ export default function OfficeScreen() {
     addSpeechBubble(currentUser.id, `🎁`, 'status', 2500)
     addSpeechBubble(offer.userId, carriedEmoji(offer.item), 'status', 2500)
     addToast(`${offer.name} took ${carriedShort(offer.item)}`, 'success', 2200)
+    recordInteraction('gift', offer.userId, offer.name, carriedShort(offer.item))
   }
 
   const handleCoffeeInvite = useCallback((userId: string) => {
     const name = onlineUsers.find(u => u.user.id === userId)?.user.name
     addSpeechBubble(currentUser.id, '☕ Coffee?', 'status', 3000)
     addToast(`Invited ${name?.split(' ')[0] ?? 'them'} for a coffee. They can walk to the kitchen.`, 'success', 2200)
-  }, [onlineUsers, addToast, addSpeechBubble, currentUser.id])
+    if (name) recordInteraction('coffee', userId, name)
+  }, [onlineUsers, addToast, addSpeechBubble, currentUser.id, recordInteraction])
 
   // User's claimed desk position for focus mode
   const userDeskPosition = useMemo(() => {
@@ -620,9 +804,25 @@ export default function OfficeScreen() {
   const handleDmSend = useCallback((text: string) => {
     if (!dmUser || !text.trim()) return
     const uid = dmUser.user.id
-    const msg = { id: `dm_${Date.now()}`, from: 'You', text: text.trim(), ts: Date.now() }
+    const msg = { id: crypto.randomUUID(), from: 'You', text: text.trim(), ts: Date.now() }
     setDmThreads(prev => ({ ...prev, [uid]: [...(prev[uid] ?? []), msg] }))
-  }, [dmUser])
+    if (live) {
+      void sendOfficeMessage({
+        id: msg.id,
+        officeId: office.id,
+        authorId: currentUser.id,
+        authorName: currentUser.name,
+        authorAvatar: currentUser.avatar,
+        content: msg.text,
+        type: 'dm',
+        timestamp: new Date(msg.ts).toISOString(),
+        reactions: {},
+        isDM: true,
+        dmToUserId: uid,
+      }, uid)
+    }
+    recordInteraction('message', uid, dmUser.user.name, text.trim().slice(0, 80))
+  }, [dmUser, recordInteraction, live, office.id, currentUser])
 
   const handleOpenDm = useCallback((user: OnlineUser) => {
     setDmUser(user)
@@ -665,7 +865,7 @@ export default function OfficeScreen() {
         const desk = desks.find(d => d.id === obj.id)
         if (!desk) return obj
         if (desk.isAvailable) return { ...obj, prompt: 'Enter · Claim desk' }
-        if (desk.ownerId === currentUser.id) return { ...obj, prompt: 'Enter · Sit down' }
+        if (desk.ownerId === currentUser.id) return { ...obj, prompt: 'Enter · Laptop' }
         const owner = desk.ownerName?.split(' ')[0] ?? 'Their'
         return { ...obj, prompt: `Enter · ${owner}'s desk` }
       }
@@ -693,6 +893,87 @@ export default function OfficeScreen() {
     return subscribeAny(sync)
   }, [office.id, designId])
 
+  const boardRoomRef = useRef(boardRoom)
+  boardRoomRef.current = boardRoom
+  useEffect(() => {
+    const sessionsSeen = new Set<string>()
+    const itemsSeen = new Set<string>()
+    let primed = false
+    const placeName = (roomId: string) => {
+      const label = (officeMap.areaLabels ?? []).find(item => roomIdAt(rooms, item.gridX, item.gridY) === roomId)
+      return label ? label.text.toLowerCase().replace(/\b\w/g, char => char.toUpperCase()) : ''
+    }
+    const scan = () => {
+      const sessions = readOfficeDiscussions(office.id, designId).flatMap(({ doc }) => {
+        const live = activeSession(doc)
+        return live ? [live] : []
+      })
+      const items = readOfficeBoards(office.id, designId).flatMap(({ roomId, board }) =>
+        board.items.filter(item => !item.deleted).map(item => ({ item, roomId }))
+      )
+      if (!primed) {
+        sessions.forEach(session => sessionsSeen.add(session.id))
+        items.forEach(({ item }) => itemsSeen.add(item.id))
+        primed = true
+        return
+      }
+      for (const session of sessions) {
+        if (sessionsSeen.has(session.id)) continue
+        sessionsSeen.add(session.id)
+        const place = placeName(session.roomId)
+        pushNotice(office.id, {
+          id: `discuss_${session.id}`,
+          kind: 'discussion',
+          actorId: session.hostId,
+          actorName: session.hostName,
+          title: session.title,
+          detail: place,
+          roomId: session.roomId,
+          x: session.anchor?.x,
+          y: session.anchor?.y,
+        })
+      }
+      for (const { item, roomId } of items) {
+        if (itemsSeen.has(item.id)) continue
+        itemsSeen.add(item.id)
+        const place = placeName(roomId)
+        pushNotice(office.id, {
+          id: `board_${item.id}`,
+          kind: 'board',
+          actorId: item.authorId,
+          actorName: item.authorName,
+          title: 'Whiteboard',
+          detail: boardSnippet(item, place),
+          roomId,
+          read: item.authorId === currentUser.id && boardRoomRef.current === roomId,
+        })
+      }
+    }
+    scan()
+    return subscribeAny(scan)
+  }, [office.id, designId, officeMap, rooms, currentUser.id])
+
+  const jamWatch = useRef<{ officeId: string; stamp: string | null }>({ officeId: '', stamp: null })
+  useEffect(() => {
+    const stamp = officeMusic.jam?.sharedAt ?? ''
+    if (jamWatch.current.officeId !== office.id || jamWatch.current.stamp === null) {
+      jamWatch.current = { officeId: office.id, stamp }
+      return
+    }
+    if (!stamp || stamp === jamWatch.current.stamp) return
+    jamWatch.current = { officeId: office.id, stamp }
+    const jam = officeMusic.jam
+    if (!jam) return
+    pushNotice(office.id, {
+      id: `jam_${jam.sharedAt}`,
+      kind: 'jam',
+      actorId: jam.sharedById,
+      actorName: jam.sharedByName,
+      title: 'Spotify Jam',
+      detail: '',
+    })
+  }, [office.id, officeMusic.jam])
+
   useEffect(() => {
     if (!seatedSeatId) return
     const seat = mapWithDesks.interactables.find(obj => obj.id === seatedSeatId)
@@ -711,9 +992,56 @@ export default function OfficeScreen() {
         currentUser={currentUser}
         onInvite={() => setShowInvite(true)}
         onSettings={() => setShowSettings(true)}
+        onDashboard={onOpenDashboard}
+        onOpenTasks={() => setShowTasks(true)}
+        onToggleNotices={() => setNoticesOpen(open => !open)}
+        noticesOpen={noticesOpen}
+        unreadCount={notices.filter(notice => !notice.read).length}
         onToggleSidebar={() => setSidebarOpen(v => !v)}
         sidebarOpen={sidebarOpen}
       />
+
+      {noticesOpen && (
+        <NotificationCentre
+          notices={notices}
+          userId={currentUser.id}
+          onMarkAll={() => markAllNoticesRead(office.id)}
+          onClose={() => setNoticesOpen(false)}
+          onOpen={notice => {
+            markNoticeRead(office.id, notice.id)
+            setNoticesOpen(false)
+            if (notice.kind === 'discussion') {
+              const table = (officeMap.interactables ?? []).find(obj =>
+                obj.type === 'use_meeting' && (
+                  roomIdAt(rooms, obj.gridX, obj.gridY) === notice.roomId
+                  || (notice.x != null && obj.gridX === notice.x && obj.gridY === notice.y)
+                )
+              )
+              setEnterDiscussion(true)
+              setMeetingTarget(table ?? {
+                id: `notice_meeting_${notice.roomId ?? 'room'}`,
+                type: 'use_meeting',
+                gridX: notice.x ?? 0,
+                gridY: notice.y ?? 0,
+                label: 'Meeting Table',
+                prompt: 'Enter · Meeting room',
+              })
+              return
+            }
+            if (notice.kind === 'board' && notice.roomId) {
+              setBoardRoom(notice.roomId)
+              return
+            }
+            if (notice.kind === 'jam') {
+              setShowMusic(true)
+              return
+            }
+            const personId = notice.actorId === currentUser.id ? notice.personId : notice.actorId
+            const person = onlineUsers.find(user => user.user.id === personId)
+            if (person) setSelectedUser(person)
+          }}
+        />
+      )}
 
       {/* Main area */}
       <div className="flex flex-1 min-h-0">
@@ -731,7 +1059,7 @@ export default function OfficeScreen() {
             userDeskPosition={userDeskPosition}
             speechBubbles={speechBubbles}
             onInteract={handleInteract}
-            suspendInput={!!(selectedDesk || selectedUser || showBookshelf || boardRoom || meetingTarget || menuObject || showSettings || showInvite || showFocusHistory || baristaOpen)}
+            suspendInput={!!(selectedDesk || selectedUser || showBookshelf || boardRoom || meetingTarget || menuObject || showSettings || showInvite || showFocusHistory || baristaOpen || noticesOpen || showTasks)}
             fireplaceLit={fireplaceLit}
             debateMarker={debateMarker}
           />
@@ -779,43 +1107,44 @@ export default function OfficeScreen() {
             />
           )}
 
-          {/* Office design picker – floating top-left */}
-          <div className="absolute top-2 left-2 z-30">
-            <button
-              onClick={() => setShowDesignPicker(v => !v)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wide hover:opacity-90 transition-opacity"
-              style={{ background: 'rgba(25,35,49,0.85)', border: '1px solid rgba(242,232,216,0.2)', color: '#F2E8D8', backdropFilter: 'blur(6px)' }}
-            >
-              {OFFICE_DESIGNS.find(d => d.id === designId)?.emoji} Design
-            </button>
-            {showDesignPicker && (
-              <div className="mt-1 min-w-[220px] shadow-2xl" style={{ background: '#192331', border: '1px solid rgba(242,232,216,0.2)' }}>
-                {OFFICE_DESIGNS.map(d => (
-                  <button
-                    key={d.id}
-                    onClick={() => {
-                      setDesignId(d.id)
-                      setDesks(d.build().desks.map((desk, i) =>
-                        i === 0 ? { ...desk, ownerId: currentUser.id, ownerName: 'You', isAvailable: false } : desk
-                      ))
-                      setCurrentPos({ gridX: 4, gridY: 4 })
-                      setShowDesignPicker(false)
-                      saveState({ currentPos: { gridX: 4, gridY: 4 }, designId: d.id })
-                      addToast(`Switched to ${d.name}`, 'success', 2000)
-                    }}
-                    className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left transition-colors"
-                    style={{ color: d.id === designId ? '#E3B775' : '#F2E8D8', background: d.id === designId ? 'rgba(242,232,216,0.1)' : 'transparent' }}
-                  >
-                    <span className="text-base mt-0.5">{d.emoji}</span>
-                    <div>
-                      <div className="font-mono text-[11px] font-bold uppercase tracking-wide">{d.name}</div>
-                      <div className="text-[10px] opacity-60 mt-0.5">{d.desc}</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          {designAdmin && (
+            <div className="absolute top-2 left-2 z-30">
+              <button
+                onClick={() => setShowDesignPicker(v => !v)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wide hover:opacity-90 transition-opacity"
+                style={{ background: 'rgba(25,35,49,0.85)', border: '1px solid rgba(242,232,216,0.2)', color: '#F2E8D8', backdropFilter: 'blur(6px)' }}
+              >
+                {OFFICE_DESIGNS.find(d => d.id === designId)?.emoji} Design
+              </button>
+              {showDesignPicker && (
+                <div className="mt-1 min-w-[220px] shadow-2xl" style={{ background: '#192331', border: '1px solid rgba(242,232,216,0.2)' }}>
+                  {OFFICE_DESIGNS.map(d => (
+                    <button
+                      key={d.id}
+                      onClick={() => {
+                        setDesignId(d.id)
+                        setDesks(d.build().desks.map((desk, i) =>
+                          i === 0 ? { ...desk, ownerId: currentUser.id, ownerName: 'You', isAvailable: false } : desk
+                        ))
+                        setCurrentPos({ gridX: 4, gridY: 4 })
+                        setShowDesignPicker(false)
+                        saveState({ currentPos: { gridX: 4, gridY: 4 }, designId: d.id })
+                        addToast(`Switched to ${d.name}`, 'success', 2000)
+                      }}
+                      className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left transition-colors"
+                      style={{ color: d.id === designId ? '#E3B775' : '#F2E8D8', background: d.id === designId ? 'rgba(242,232,216,0.1)' : 'transparent' }}
+                    >
+                      <span className="text-base mt-0.5">{d.emoji}</span>
+                      <div>
+                        <div className="font-mono text-[11px] font-bold uppercase tracking-wide">{d.name}</div>
+                        <div className="text-[10px] opacity-60 mt-0.5">{d.desc}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
 
           {!sidebarOpen && (
@@ -850,7 +1179,7 @@ export default function OfficeScreen() {
                 if (musicPrefs.minimised) updateMusicPrefs({ minimised: false })
                 setShowMusic(true)
               }}
-              onOpenProfile={() => {}}
+              onOpenProfile={() => onOpenDashboard?.()}
               onReaction={handleReaction}
               onOpenFocusHistory={() => setShowFocusHistory(true)}
               carriedItem={carriedItem}
@@ -880,7 +1209,7 @@ export default function OfficeScreen() {
         {sidebarOpen && (
           <ChatSidebar
             messages={messages}
-            sharedLinks={demoSharedLinks}
+            sharedLinks={live ? [] : demoSharedLinks}
             onlineUsers={onlineUsers}
             currentUser={currentUser}
             onSendMessage={handleSendMessage}
@@ -935,10 +1264,12 @@ export default function OfficeScreen() {
             const all = JSON.parse(localStorage.getItem(key) || '{}') as Record<string, string>
             all[selectedDesk.id] = text
             localStorage.setItem(key, JSON.stringify(all))
+            if (live) publishNotes(office.id, designId, all)
           } catch { /* ignore */ }
           addSpeechBubble(currentUser.id, '📝 left a note', 'status', 2500)
           addToast('Note left on the desk', 'success', 1800)
         }}
+        onOpenTasks={() => { setSelectedDesk(null); setShowTasks(true) }}
         note={selectedDesk ? (() => {
           try { return (JSON.parse(localStorage.getItem(`vo_notes_${designId}`) || '{}') as Record<string, string>)[selectedDesk.id] } catch { return undefined }
         })() : undefined}
@@ -988,7 +1319,13 @@ export default function OfficeScreen() {
         office={{ ...office, name: officeName }}
         memberships={memberships}
         currentUser={currentUser}
-        onRename={(name) => { setOfficeName(name); addToast('Office renamed!', 'success') }}
+        onRename={(name) => {
+          setOfficeName(name)
+          if (live) {
+            void renameRemoteOffice(office.id, name).then(() => onOfficeUpdated?.({ ...office, name })).catch(() => {})
+          }
+          addToast('Office renamed!', 'success')
+        }}
         onLeave={() => addToast('Left the office', 'info')}
       />
 
@@ -1006,11 +1343,11 @@ export default function OfficeScreen() {
             <h2 className="type-h3 text-ink mb-4">Invite to {officeName}</h2>
             <div className="flex gap-2 mb-4">
               <div className="flex-1 bg-muted border border-border px-3 py-2 type-small text-ink-2 font-mono truncate">
-                virtualoffice.app/join/{office.inviteCode}
+                sidedesk.app/join/{office.inviteCode}
               </div>
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(`https://virtualoffice.app/join/${office.inviteCode}`)
+                  navigator.clipboard.writeText(`https://sidedesk.app/join/${office.inviteCode}`)
                   addToast('Invite link copied!', 'success')
                   setShowInvite(false)
                 }}
@@ -1022,6 +1359,16 @@ export default function OfficeScreen() {
             <p className="type-small text-ink-2">Anyone with this link can join your private office.</p>
           </div>
         </div>
+      )}
+
+      {showTasks && (
+        <TaskBoard
+          officeId={office.id}
+          userId={currentUser.id}
+          userName={currentUser.name}
+          canModerate={canEditMusic}
+          onClose={() => setShowTasks(false)}
+        />
       )}
 
       <FocusHistoryPanel
@@ -1109,7 +1456,8 @@ export default function OfficeScreen() {
             setSeatedSeatId(null)
             setOnlineUsers(prev => prev.map(user => user.isCurrentUser ? { ...user, seated: false } : user))
           }}
-          onClose={() => setMeetingTarget(null)}
+          joinOnOpen={enterDiscussion}
+          onClose={() => { setMeetingTarget(null); setEnterDiscussion(false) }}
         />
       )}
 

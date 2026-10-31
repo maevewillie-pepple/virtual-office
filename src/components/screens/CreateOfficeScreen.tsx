@@ -1,19 +1,21 @@
 import React, { useState } from 'react'
 import { ArrowLeft, Check, Copy, ArrowRight } from 'lucide-react'
+import { OFFICE_DESIGNS, type OfficeDesignId } from '../../data/officeMap'
+import type { OfficeTheme } from '../../types'
 import Button from '../ui/Button'
 
+function themeFor(layout: OfficeDesignId): OfficeTheme {
+  if (layout === 'library') return 'quiet_library'
+  if (layout === 'loft') return 'creative_loft'
+  return 'cosy_studio'
+}
+
 interface CreateOfficeScreenProps {
-  onCreated: (name: string, theme: string) => void
+  onCreated: (draft: { name: string; description: string; theme: string; layout: OfficeDesignId; inviteCode: string }) => void | Promise<void>
   onBack: () => void
 }
 
 type Step = 1 | 2 | 3 | 4
-
-const LAYOUTS = [
-  { id: 'cosy_studio',   name: 'Cosy Studio',    desc: 'Warm oak floors, plants everywhere.',   icon: '🪴' },
-  { id: 'creative_loft', name: 'Creative Loft',   desc: 'Industrial finishes, open spaces.',     icon: '🎨' },
-  { id: 'quiet_library', name: 'Quiet Library',   desc: 'Minimal, calm, focused atmosphere.',    icon: '📚' },
-]
 
 const inputCls = `w-full h-10 bg-canvas border border-border px-3 text-[14px] text-ink
   placeholder-ink-3 transition-colors focus:outline-none focus:border-olive focus:ring-1 focus:ring-olive/30`
@@ -22,15 +24,17 @@ export default function CreateOfficeScreen({ onCreated, onBack }: CreateOfficeSc
   const [step, setStep] = useState<Step>(1)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [theme, setTheme] = useState('cosy_studio')
+  const [layout, setLayout] = useState<OfficeDesignId>('classic')
   const [inviteCode] = useState(() =>
     Math.random().toString(36).slice(2, 6).toUpperCase() + '-' +
     Math.random().toString(36).slice(2, 6).toUpperCase()
   )
   const [copied, setCopied] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
   const copyLink = () => {
-    navigator.clipboard.writeText(`https://virtualoffice.app/join/${inviteCode}`)
+    navigator.clipboard.writeText(`https://sidedesk.app/join/${inviteCode}`)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -109,23 +113,24 @@ export default function CreateOfficeScreen({ onCreated, onBack }: CreateOfficeSc
           {/* Step 2: Layout */}
           {step === 2 && (
             <div className="space-y-3">
-              <h2 className="type-h3 text-ink">Choose a layout</h2>
-              {LAYOUTS.map(l => (
+              <h2 className="type-h3 text-ink">Choose a room</h2>
+              <p className="type-small text-ink-2">This is the room the office opens in.</p>
+              {OFFICE_DESIGNS.map(room => (
                 <button
-                  key={l.id}
-                  onClick={() => setTheme(l.id)}
+                  key={room.id}
+                  onClick={() => setLayout(room.id)}
                   className={`w-full p-3.5 rounded-lg border text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-focus
-                    ${theme === l.id ? 'border-olive/40 bg-olive-soft' : 'border-border hover:border-border-strong'}`}
+                    ${layout === room.id ? 'border-olive/40 bg-olive-soft' : 'border-border hover:border-border-strong'}`}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-xl">{l.icon}</span>
+                    <span className="text-xl">{room.emoji}</span>
                     <div className="flex-1">
-                      <p className={`type-label text-[13px] ${theme === l.id ? 'text-olive' : 'text-ink'}`}>
-                        {l.name}
+                      <p className={`type-label text-[13px] ${layout === room.id ? 'text-olive' : 'text-ink'}`}>
+                        {room.name}
                       </p>
-                      <p className="type-small text-ink-2 mt-0.5">{l.desc}</p>
+                      <p className="type-small text-ink-2 mt-0.5">{room.desc}</p>
                     </div>
-                    {theme === l.id && <Check size={14} strokeWidth={2} className="text-olive flex-shrink-0" />}
+                    {layout === room.id && <Check size={14} strokeWidth={2} className="text-olive flex-shrink-0" />}
                   </div>
                 </button>
               ))}
@@ -175,7 +180,7 @@ export default function CreateOfficeScreen({ onCreated, onBack }: CreateOfficeSc
               <div className="bg-muted border border-border rounded-lg p-3 text-left">
                 <p className="type-small text-ink-3 mb-1">Invite link</p>
                 <p className="type-small text-ink font-mono truncate">
-                  virtualoffice.app/join/{inviteCode}
+                  sidedesk.app/join/{inviteCode}
                 </p>
               </div>
               <Button
@@ -186,7 +191,14 @@ export default function CreateOfficeScreen({ onCreated, onBack }: CreateOfficeSc
               >
                 {copied ? 'Copied!' : 'Copy invite link'}
               </Button>
-              <Button className="w-full" onClick={() => onCreated(name, theme)} icon={<ArrowRight size={14} strokeWidth={1.75} />}>
+              {error && <p className="text-[13px] leading-5 text-error" role="alert">{error}</p>}
+              <Button className="w-full" loading={saving} onClick={() => {
+                setSaving(true)
+                setError('')
+                Promise.resolve(onCreated({ name, description, theme: themeFor(layout), layout, inviteCode }))
+                  .catch(err => setError(err instanceof Error ? err.message : 'Could not create the office.'))
+                  .finally(() => setSaving(false))
+              }} icon={<ArrowRight size={14} strokeWidth={1.75} />}>
                 Enter Your Office
               </Button>
             </div>

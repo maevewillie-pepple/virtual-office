@@ -1,7 +1,8 @@
+import { downloadBoardAsset, publishBoard, publishDiscussion, removeBoardAsset, uploadBoardAsset } from '../remote/sync'
+
 /** Shared boards and discussions for one office layout.
- *  Updates sync across tabs of this browser through localStorage.
- *  There is no separate game server, so people on other computers do not see these changes live.
- *  Image bytes live in IndexedDB. The board document only stores an asset id.
+ *  This browser keeps a copy. A configured Supabase project shares it with the office.
+ *  Image bytes live in IndexedDB, and in Storage when an office is signed in.
  */
 
 export type NoteColor = 'butter' | 'sage' | 'pink' | 'peach' | 'blue'
@@ -132,9 +133,20 @@ function readJson<T>(key: string, fallback: T): T {
   }
 }
 
+function publishStored(key: string, value: unknown) {
+  const board = /^vo_shared_board_([0-9a-f-]{36})_(classic|library|loft|studio|lab)_(.+)$/i.exec(key)
+  if (board) {
+    publishBoard(board[1], board[2], board[3], value)
+    return
+  }
+  const talk = /^vo_discussion_([0-9a-f-]{36})_(classic|library|loft|studio|lab)_(.+)$/i.exec(key)
+  if (talk) publishDiscussion(talk[1], talk[2], talk[3], value)
+}
+
 function writeJson(key: string, value: unknown) {
   localStorage.setItem(key, JSON.stringify(value))
   window.dispatchEvent(new CustomEvent(EVENT, { detail: key }))
+  publishStored(key, value)
 }
 
 export function loadBoard(officeId: string, designId: string, roomId: string): SharedBoard {
@@ -249,6 +261,31 @@ export function voteCounts(topic: DiscussionTopic) {
   return { up, down, score: up - down }
 }
 
+function keysWithPrefix(prefix: string): string[] {
+  const keys: string[] = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (key?.startsWith(prefix)) keys.push(key)
+  }
+  return keys
+}
+
+export function readOfficeBoards(officeId: string, designId: string): { roomId: string; board: SharedBoard }[] {
+  const prefix = `${BOARD_PREFIX}${officeId}_${designId}_`
+  return keysWithPrefix(prefix).map(key => {
+    const roomId = key.slice(prefix.length)
+    return { roomId, board: readJson(key, emptyBoard(officeId, roomId, key)) }
+  })
+}
+
+export function readOfficeDiscussions(officeId: string, designId: string): { roomId: string; doc: DiscussionDoc }[] {
+  const prefix = `${DISCUSS_PREFIX}${officeId}_${designId}_`
+  return keysWithPrefix(prefix).map(key => {
+    const roomId = key.slice(prefix.length)
+    return { roomId, doc: readJson(key, emptyDiscussion(officeId, roomId)) }
+  })
+}
+
 export function findLiveMarker(officeId: string, designId: string): { x: number; y: number; text: string } | null {
   const prefix = `${DISCUSS_PREFIX}${officeId}_${designId}_`
   for (let i = 0; i < localStorage.length; i++) {
@@ -330,7 +367,7 @@ function openAssets(): Promise<IDBDatabase> {
   })
 }
 
-export async function saveAsset(id: string, blob: Blob) {
+export async function saveAsset(id: string, blob: Blob, officeId?: string) {
   const db = await openAssets()
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE, 'readwrite')
@@ -339,9 +376,10 @@ export async function saveAsset(id: string, blob: Blob) {
     tx.onerror = () => reject(tx.error)
   })
   db.close()
+  if (officeId) await uploadBoardAsset(officeId, id, blob)
 }
 
-export async function loadAsset(id: string): Promise<Blob | null> {
+export async function loadAsset(id: string, officeId?: string): Promise<Blob | null> {
   const db = await openAssets()
   const blob = await new Promise<Blob | null>((resolve, reject) => {
     const tx = db.transaction(STORE, 'readonly')
@@ -350,10 +388,13 @@ export async function loadAsset(id: string): Promise<Blob | null> {
     request.onerror = () => reject(request.error)
   })
   db.close()
-  return blob
+  if (blob || !officeId) return blob
+  const remote = await downloadBoardAsset(officeId, id)
+  if (remote) await saveAsset(id, remote)
+  return remote
 }
 
-export async function deleteAsset(id: string) {
+export async function deleteAsset(id: string, officeId?: string) {
   const db = await openAssets()
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE, 'readwrite')
@@ -362,6 +403,7 @@ export async function deleteAsset(id: string) {
     tx.onerror = () => reject(tx.error)
   })
   db.close()
+  if (officeId) await removeBoardAsset(officeId, id)
 }
 
 /** Redrawing the image drops EXIF, including GPS, and shrinks oversized files. */

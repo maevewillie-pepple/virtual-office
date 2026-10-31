@@ -71,12 +71,16 @@ export interface Office {
   name: string
   description: string
   theme: OfficeTheme
+  /** The room chosen when the office was created. */
+  layout?: OfficeArtTheme
   ownerId: string
   inviteCode: string
   createdAt: string
   memberCount: number
   onlineCount: number
   coverEmoji?: string
+  /** The room chosen when the office was created. */
+  layout?: OfficeArtTheme
 }
 
 export interface Membership {

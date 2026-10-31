@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ballsMoving, pocketPoints, rackBalls, resetCue, stepPool, TABLE, type PoolBall } from '../../../game/arcade/pool'
 import { personalBest, recordScore, type ArcadeDoc } from '../../../game/arcade/store'
+import SegmentedControl from '../../ui/SegmentedControl'
 
 type Mode = 'solo' | 'match'
 
@@ -192,20 +193,22 @@ export default function PoolGame({
 
   return (
     <div className="flex flex-col items-center gap-3">
-      <p className="text-center text-[12px] leading-5 text-ink-2">
+      <p className="text-center text-[14px] leading-5 text-ink-2">
         {hint ? 'Aim your cue, pull back to set power, and release to shoot.' : mode === 'match' ? `${names[turn]} to play on this keyboard. A pocket keeps the turn.` : 'Pocket all six balls.'}
       </p>
-      <div className="flex flex-wrap items-center justify-center gap-3 text-[12px] text-ink-2">
+      <div className="flex flex-wrap items-center justify-center gap-3 text-[14px] text-ink-2">
         <span>Shots {shots}</span>
         <span>Pocketed {pocketed}/6</span>
         <span>Scratches {scratches}</span>
-        {mode === 'match' && <span>{names[0]} {scores[0]} · {names[1]} {scores[1]}</span>}
+        {mode === 'match' && <span>{names[turn]}’s turn · {names[0]} {scores[0]} · {names[1]} {scores[1]}</span>}
         {best?.shots != null && <span>Best {best.shots} shots</span>}
       </div>
-      <div className="flex gap-1">
-        <button type="button" className={`h-7 rounded-md px-2 text-[12px] ${mode === 'solo' ? 'bg-olive-soft text-olive' : 'text-ink-2'}`} onClick={() => restart('solo')}>Practice</button>
-        <button type="button" className={`h-7 rounded-md px-2 text-[12px] ${mode === 'match' ? 'bg-olive-soft text-olive' : 'text-ink-2'}`} onClick={() => restart('match')}>Two players</button>
-      </div>
+      <SegmentedControl
+        label="Pool mode"
+        value={mode}
+        onChange={restart}
+        options={[{ id: 'solo', label: 'Practice' }, { id: 'match', label: 'Two players' }]}
+      />
       <canvas
         ref={canvasRef}
         width={680}

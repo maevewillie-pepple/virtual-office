@@ -27,19 +27,35 @@ const TOPS: { id: string; label: string }[] = [
 ]
 
 const PROMPTS: Record<CafePhase, string> = {
-  grind: 'Hold to grind.',
-  dock: 'Lock the portafilter.',
-  place: 'Drag the cup under the spout.',
-  pull: 'Stop in the sweet spot.',
-  steam: 'Keep the milk silky.',
-  pour: 'Hold the middle for a heart.',
-  dust: 'Dust a little cocoa.',
-  heat: 'Warm the milk.',
-  stir: 'Stir it smooth.',
+  grind: 'Hold to grind, then release inside the marked zone.',
+  dock: 'Lock the portafilter into the group head.',
+  place: 'Set the cup under the spout.',
+  pull: 'Stop the extraction when it reaches the sweet spot.',
+  steam: 'Stop while the milk is silky. Raise the pitcher for more foam.',
+  pour: 'Hold to pour. Keep the stream where you want the picture.',
+  dust: 'Dust a little cocoa, or leave the foam plain.',
+  heat: 'Warm the milk, then stop in the marked zone.',
+  stir: 'Stir until the cocoa melts smooth.',
   top: 'Choose a topping.',
   leaf: 'Choose the leaves.',
   kettle: 'Pour the water.',
-  steep: 'Lift the infuser in time.',
+  steep: 'Lift the infuser while the bar is in the zone.',
+}
+
+const STAGE_TITLE: Record<CafePhase, string> = {
+  grind: 'Grind the beans',
+  dock: 'Lock the portafilter',
+  place: 'Set the cup',
+  pull: 'Pull the shot',
+  steam: 'Steam the milk',
+  pour: 'Pour',
+  dust: 'Finish the foam',
+  heat: 'Warm the milk',
+  stir: 'Stir the cocoa',
+  top: 'Add a topping',
+  leaf: 'Choose the tea',
+  kettle: 'Pour the water',
+  steep: 'Steep',
 }
 
 export default function BaristaGame({ onClose, onQuick, onCollect }: BaristaGameProps) {
@@ -151,14 +167,14 @@ export default function BaristaGame({ onClose, onQuick, onCollect }: BaristaGame
   }, [flash])
 
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
     let frame = 0
     const loop = () => {
-      tick.current += 1
-      drawStation(ctx, { ...sceneRef.current, tick: tick.current })
+      const canvas = canvasRef.current
+      const ctx = canvas?.getContext('2d')
+      if (ctx) {
+        tick.current += 1
+        drawStation(ctx, { ...sceneRef.current, tick: tick.current })
+      }
       frame = requestAnimationFrame(loop)
     }
     frame = requestAnimationFrame(loop)
@@ -579,71 +595,106 @@ export default function BaristaGame({ onClose, onQuick, onCollect }: BaristaGame
   const currentGroup = phase === 'idle' ? '' : phaseGroup(phase)
   const tempC = Math.round(55 + (progress - 0.4) * (10 / 0.3))
 
+  const reviewBits = [
+    ...notes,
+    art ? artTitle(art) : '',
+    drink === 'tea' ? tea : '',
+    topping ? toppingName(topping) : '',
+  ].filter((bit, index, all) => bit && all.indexOf(bit) === index)
+  const best = Math.max(stats.best, screen === 'results' ? stars : 0)
+
   return (
     <div
-      className="absolute left-1/2 top-3 z-50 flex max-h-[calc(100%-1rem)] w-[min(720px,calc(100%-1rem))] -translate-x-1/2 flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-2xl"
+      className={`absolute left-1/2 top-3 z-50 flex max-h-[calc(100%-0.75rem)] w-[min(800px,calc(100%-1rem))] -translate-x-1/2 flex-col border-2 border-ink bg-surface shadow-[4px_4px_0_#30352F] ${screen === 'menu' ? 'overflow-auto' : 'overflow-hidden'}`}
       role="dialog"
       aria-label="Café Counter"
       onMouseDown={event => event.stopPropagation()}
     >
-      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
-        <h2 className="text-[14px] font-semibold text-ink">Café Counter</h2>
-        {screen !== 'choose' && <span className="truncate text-[12px] text-ink-3">{screen === 'menu' ? 'Choose a drink' : DRINKS.find(entry => entry.id === drink)?.name}</span>}
-        <button type="button" className="ml-auto flex h-8 w-8 items-center justify-center rounded-md text-ink-2 hover:bg-muted" aria-label={muted ? 'Unmute café sounds' : 'Mute café sounds'} onClick={() => { const next = !muted; setMuted(next); localStorage.setItem(SOUND_KEY, next ? '1' : '0') }}>
-          {muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+      <header className="sticky top-0 z-10 flex h-12 shrink-0 items-center gap-3 border-b-2 border-ink bg-surface px-3">
+        <h2 className="font-display text-[15px] font-bold uppercase tracking-[0.14em] text-ink">Café Counter</h2>
+        {screen !== 'choose' && (
+          <span className="truncate text-[14px] text-ink-2">{screen === 'menu' ? 'Choose a drink' : DRINKS.find(entry => entry.id === drink)?.name}</span>
+        )}
+        <button type="button" className="btn-stamp ml-auto flex h-8 w-8 items-center justify-center border-2 border-ink bg-surface text-ink" style={{ ['--btn-shadow' as string]: '2px 2px 0 #A9AB9F' }} aria-label={muted ? 'Unmute café sounds' : 'Mute café sounds'} onClick={() => { const next = !muted; setMuted(next); localStorage.setItem(SOUND_KEY, next ? '1' : '0') }}>
+          {muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
         </button>
-        <button type="button" className="flex h-8 w-8 items-center justify-center rounded-md text-ink-2 hover:bg-muted" aria-label="Close café" onClick={onClose}>
-          <X size={16} />
+        <button type="button" className="btn-stamp flex h-8 w-8 items-center justify-center border-2 border-ink bg-surface text-ink" style={{ ['--btn-shadow' as string]: '2px 2px 0 #A9AB9F' }} aria-label="Close café" onClick={onClose}>
+          <X size={15} />
         </button>
       </header>
 
       {screen === 'menu' ? (
-        <div className="min-h-0 flex-1 overflow-auto p-3">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="p-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {DRINKS.map(entry => (
-              <button key={entry.id} type="button" onClick={() => begin(entry.id)} className="flex flex-col items-start gap-1 rounded-lg border border-border bg-canvas p-2 text-left motion-safe:transition-transform motion-safe:hover:-translate-y-0.5 hover:border-olive/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+              <button key={entry.id} type="button" onClick={() => begin(entry.id)} className="flex items-start gap-2 border-2 border-ink bg-canvas p-2 text-left hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                 <DrinkArt drink={entry.id} />
                 <span className="min-w-0">
-                  <span className="block text-[13px] font-medium text-ink">{entry.name}</span>
-                  <span className="mt-0.5 block text-[11px] leading-4 text-ink-2">{entry.blurb}</span>
-                  <span className="mt-1 block text-[10px] uppercase tracking-wide text-ink-3">{entry.difficulty} · {entry.duration}</span>
+                  <span className="block text-[15px] font-medium text-ink">{entry.name}</span>
+                  <span className="mt-0.5 block text-[14px] leading-5 text-ink-2">{entry.blurb}</span>
+                  <span className="mt-1 block text-[13px] text-ink-2">{entry.difficulty} · {entry.duration}</span>
                 </span>
               </button>
             ))}
           </div>
-          <button type="button" className="mt-3 text-[12px] text-ink-3 hover:text-ink" onClick={() => setScreen('choose')}>Back</button>
+          <div className="mt-4">
+            <Quiet onClick={() => setScreen('choose')}>Back</Quiet>
+          </div>
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto">
-          <div className="relative">
-            <canvas
-              ref={canvasRef}
-              width={w}
-              height={h}
-              className="aspect-[256/160] w-full bg-[#E7D3B5]"
-              style={{ imageRendering: 'pixelated' }}
-              aria-label={prompt || 'Café counter'}
-              onPointerDown={screen === 'play' ? pointerDown : undefined}
-              onPointerMove={screen === 'play' ? pointerMove : undefined}
-              onPointerUp={screen === 'play' ? pointerUp : undefined}
-              onPointerCancel={screen === 'play' ? pointerUp : undefined}
-            />
-            {flash && <p className="pointer-events-none absolute left-1/2 top-2 -translate-x-1/2 rounded-full bg-surface/95 px-3 py-1 text-[12px] font-medium text-ink shadow" role="status">{flash}</p>}
+        <>
+          <div className="flex shrink-0 justify-center bg-[#E7D3B5]">
+          <canvas
+            ref={canvasRef}
+            width={w}
+            height={h}
+            className="block max-w-full"
+            style={{ imageRendering: 'pixelated', height: 'min(42vh, 360px)', width: 'auto' }}
+            aria-label={prompt || 'Café counter'}
+            onPointerDown={screen === 'play' ? pointerDown : undefined}
+            onPointerMove={screen === 'play' ? pointerMove : undefined}
+            onPointerUp={screen === 'play' ? pointerUp : undefined}
+            onPointerCancel={screen === 'play' ? pointerUp : undefined}
+          />
+          </div>
+          <section className="shrink-0 border-t-2 border-ink bg-canvas px-4 py-3" aria-live="polite">
             {screen === 'choose' && (
-              <div className="absolute inset-x-3 bottom-3 flex flex-wrap items-end justify-between gap-2">
-                <p className="max-w-[220px] text-[13px] leading-5 text-ink">Take a break and make something good.</p>
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <p className="text-[16px] leading-6 text-ink">Take a break and make something good.</p>
+                  <p className="mt-1 text-[14px] text-ink-2">
+                    {stats.made} made · best {stats.best || '–'}
+                    {fav ? ` · usual ${drinkName(fav)}` : ''}
+                  </p>
+                  <label className="mt-2 inline-flex items-center gap-2 text-[14px] text-ink">
+                    <input type="checkbox" checked={relaxed} onChange={event => setRelaxed(event.target.checked)} />
+                    Relaxed timing
+                  </label>
+                </div>
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" className="h-8 rounded-md border border-olive/30 bg-olive-soft px-3 text-[12px] font-medium text-olive" onClick={() => setScreen('menu')}>Play barista</button>
-                  <button type="button" className="h-8 rounded-md border border-border bg-surface px-3 text-[12px] font-medium text-ink" onClick={onQuick}>Quick drink</button>
+                  <Action onClick={() => setScreen('menu')}>Play barista</Action>
+                  <Quiet onClick={onQuick}>Quick drink</Quiet>
                 </div>
               </div>
             )}
             {screen === 'play' && phase !== 'idle' && (
-              <div className="absolute bottom-2 right-2 w-[min(220px,calc(100%-1rem))] rounded-lg border border-border bg-surface/95 p-2 shadow">
-                <p className="text-[12px] leading-4 text-ink">{prompt}</p>
-                <div className="mt-2 flex flex-wrap gap-1">
+              <div>
+                <p className="font-mono text-[13px] font-bold uppercase tracking-[0.12em] text-olive">{STAGE_TITLE[phase]}</p>
+                <p className="mt-1 text-[15px] leading-6 text-ink">{prompt}</p>
+                {flash && <p className="mt-1 text-[14px] font-medium text-olive" role="status">{flash}</p>}
+                {phase === 'grind' && <Gauge value={grounds} start={0.55} end={0.8} label="Dose" low="Short" high="Full" />}
+                {phase === 'pull' && <Gauge value={progress} start={TIMING_ZONE.start} end={TIMING_ZONE.end} label="Extraction" low="Under" high="Over" />}
+                {phase === 'heat' && <Gauge value={progress} start={TIMING_ZONE.start} end={TIMING_ZONE.end} label="Heat" low="Cool" high="Hot" />}
+                {phase === 'steep' && <Gauge value={progress} start={TIMING_ZONE.start} end={TIMING_ZONE.end} label="Steep" low="Shy" high="Long" />}
+                {phase === 'steam' && (
+                  <>
+                    <Gauge value={progress} start={TIMING_ZONE.start} end={TIMING_ZONE.end} label="Heat" low="Cool" high="Hot" />
+                    <p className="mt-1 text-[14px] text-ink-2">{tempC}°C · {foam > 0.55 ? 'Silky' : 'Still bubbling'}</p>
+                  </>
+                )}
+                <div className="mt-3 flex flex-wrap gap-2">
                   {phase === 'grind' && (
-                    <button type="button" className="h-8 rounded-md bg-olive-soft px-3 text-[12px] font-medium text-olive" onPointerDown={() => { holdingRef.current = true; setHolding(true) }} onPointerUp={releaseGrind} onPointerCancel={releaseGrind}>Hold to grind</button>
+                    <Action onPointerDown={() => { holdingRef.current = true; setHolding(true) }} onPointerUp={releaseGrind} onPointerCancel={releaseGrind}>Hold to grind</Action>
                   )}
                   {phase === 'dock' && <Action onClick={snapLock}>Lock in</Action>}
                   {phase === 'place' && <Action onClick={snapCup}>Place cup</Action>}
@@ -661,7 +712,7 @@ export default function BaristaGame({ onClose, onQuick, onCollect }: BaristaGame
                   {phase === 'pour' && (
                     <>
                       <Quiet onClick={() => nudge('ArrowLeft')}>Left</Quiet>
-                      <button type="button" className="h-8 rounded-md bg-olive-soft px-3 text-[12px] font-medium text-olive" onPointerDown={beginPour} onPointerUp={endPour}>Hold to pour</button>
+                      <Action onPointerDown={beginPour} onPointerUp={endPour} onPointerCancel={endPour}>Hold to pour</Action>
                       <Quiet onClick={() => nudge('ArrowRight')}>Right</Quiet>
                     </>
                   )}
@@ -676,54 +727,44 @@ export default function BaristaGame({ onClose, onQuick, onCollect }: BaristaGame
                   {phase === 'leaf' && TEAS.map((name, index) => <Quiet key={name} onClick={() => pickLeaf(index)}>{name.split(' ')[0]}</Quiet>)}
                   {phase === 'top' && TOPS.map((item, index) => <Quiet key={item.id} onClick={() => pickTop(index)}>{item.label}</Quiet>)}
                 </div>
-                {phase === 'grind' && <Gauge value={grounds} start={0.55} end={0.8} label="Grounds" />}
-                {phase === 'pull' && <Gauge value={progress} start={TIMING_ZONE.start} end={TIMING_ZONE.end} label="Extraction" />}
-                {phase === 'heat' && <Gauge value={progress} start={TIMING_ZONE.start} end={TIMING_ZONE.end} label="Heat" />}
-                {phase === 'steep' && <Gauge value={progress} start={TIMING_ZONE.start} end={TIMING_ZONE.end} label="Steep" />}
-                {phase === 'steam' && (
-                  <>
-                    <Gauge value={progress} start={TIMING_ZONE.start} end={TIMING_ZONE.end} label="Heat" />
-                    <p className="mt-1 text-[11px] text-ink-2">{tempC}°C · {foam > 0.55 ? 'Silky' : 'Bubbly'} · sweet spot 55–65°</p>
-                  </>
-                )}
               </div>
             )}
-          </div>
-          {screen === 'choose' && (
-            <p className="px-3 py-2 text-[11px] text-ink-3">
-              {stats.made} made · best {stats.best || '–'}
-              {fav ? ` · usual ${drinkName(fav)}` : ''}
-              <label className="ml-3 inline-flex items-center gap-1">
-                <input type="checkbox" checked={relaxed} onChange={event => setRelaxed(event.target.checked)} />
-                Relaxed
-              </label>
-            </p>
-          )}
-          {screen === 'results' && (
-            <div className="px-4 py-3 text-center">
-              <p className="text-[16px] font-semibold text-ink">{cap(resultTitle(drink, stars))}</p>
-              <p className="mt-1 font-mono text-[14px] tracking-wide text-olive" aria-label={`${stars} out of 5 stars`}>{'★'.repeat(stars)}{'☆'.repeat(5 - stars)}</p>
-              <p className="mt-1 text-[13px] leading-5 text-ink-2">{resultLine(drink, stars)}</p>
-              {notes.length > 0 && <p className="mt-1 text-[12px] text-ink-3">{notes.join(' · ')}</p>}
-              {art && <p className="text-[12px] text-ink">{artTitle(art)}{stars >= 4 && art === 'heart' ? ' · almost too pretty to drink' : ''}</p>}
-              {drink === 'tea' && <p className="text-[12px] text-ink-3">{tea}</p>}
-              {topping && <p className="text-[12px] text-ink-3">{toppingName(topping)}</p>}
-              {badge && <p className="text-[12px] text-olive">{badge}</p>}
-              <div className="mt-3 flex justify-center gap-2">
-                <Action onClick={collect}>Take drink</Action>
-                <Quiet onClick={() => { setScreen('menu'); setArt(undefined) }}>Make another</Quiet>
+            {screen === 'results' && (
+              <div>
+                <h3 className="font-display text-[22px] font-bold uppercase tracking-wide text-ink">{cap(resultTitle(drink, stars))}</h3>
+                <p className="mt-1 font-mono text-[16px] tracking-wide text-olive" aria-label={`${stars} out of 5 stars`}>{'★'.repeat(stars)}{'☆'.repeat(5 - stars)}</p>
+                {reviewBits.length > 0 && <p className="mt-2 text-[15px] leading-6 text-ink">{reviewBits.join(' · ')}</p>}
+                <p className="mt-1 text-[15px] leading-6 text-ink-2">“{resultLine(drink, stars)}”</p>
+                {best > 0 && <p className="mt-1 text-[14px] text-ink-2">Best cup so far · {best} {best === 1 ? 'star' : 'stars'}</p>}
+                {badge && <p className="mt-1 text-[14px] text-olive">{badge}</p>}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Action onClick={collect}>Take drink</Action>
+                  <Quiet onClick={() => { setScreen('menu'); setArt(undefined) }}>Make another</Quiet>
+                  <Quiet onClick={onClose}>Close</Quiet>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </section>
+        </>
       )}
 
       {screen === 'play' && (
-        <footer className="flex h-10 shrink-0 items-center gap-2 border-t border-border px-3">
-          {groups.map(group => (
-            <span key={group} className={`text-[12px] ${group === currentGroup ? 'font-medium text-olive' : 'text-ink-3'}`}>{group}</span>
-          ))}
-          <span className="ml-auto text-[11px] text-ink-3">Arrows move · Space acts</span>
+        <footer className="flex shrink-0 flex-wrap items-center gap-2 border-t-2 border-ink bg-surface px-3 py-2">
+          <ol className="flex flex-wrap items-center gap-2" aria-label="Drink progress">
+            {groups.map((group, index) => {
+              const current = groups.indexOf(currentGroup)
+              const state = index < current ? 'done' : index === current ? 'current' : 'upcoming'
+              return (
+                <li key={group} className="flex items-center gap-2" aria-current={state === 'current' ? 'step' : undefined}>
+                  {index > 0 && <span className="text-[13px] text-ink-3" aria-hidden>→</span>}
+                  <span className={`font-mono text-[13px] font-bold uppercase tracking-wide ${
+                    state === 'current' ? 'text-olive' : state === 'done' ? 'text-ink' : 'text-ink-3'
+                  }`}>{group}</span>
+                </li>
+              )
+            })}
+          </ol>
+          <span className="ml-auto text-[13px] text-ink-2">Space acts · Arrows nudge</span>
         </footer>
       )}
     </div>
@@ -773,24 +814,49 @@ function DrinkArt({ drink }: { drink: CafeDrink }) {
   return <canvas ref={ref} width={32} height={32} className="h-16 w-16 shrink-0" style={{ imageRendering: 'pixelated' }} aria-hidden />
 }
 
-function Gauge({ value, start, end, label }: { value: number; start: number; end: number; label: string }) {
+function Gauge({ value, start, end, label, low, high }: { value: number; start: number; end: number; label: string; low: string; high: string }) {
   return (
-    <div className="mt-2">
-      <div className="mb-1 flex justify-between text-[10px] uppercase tracking-wide text-ink-3">
+    <div className="mt-3 max-w-md">
+      <div className="mb-1 flex justify-between text-[13px] text-ink-2">
         <span>{label}</span>
-        <span>Sweet spot</span>
+        <span>Ideal</span>
       </div>
-      <div className="relative h-2 rounded-full bg-muted" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(value * 100)} aria-label={`${label}, sweet spot marked`}>
-        <div className="absolute inset-y-0 rounded-full bg-olive/35" style={{ left: `${start * 100}%`, width: `${(end - start) * 100}%` }} />
-        <div className="absolute top-[-2px] h-3 w-0.5 bg-ink" style={{ left: `${Math.min(100, value * 100)}%` }} />
+      <div className="relative h-3 border-2 border-ink bg-surface" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(value * 100)} aria-label={`${label}. ${low} before the ideal zone, ${high} after it.`}>
+        <div className="absolute inset-y-0 bg-olive-soft" style={{ left: `${start * 100}%`, width: `${(end - start) * 100}%` }} />
+        <div className="absolute top-[-2px] h-4 w-1 bg-ink" style={{ left: `calc(${Math.min(100, value * 100)}% - 2px)` }} />
+      </div>
+      <div className="mt-1 flex justify-between text-[12px] text-ink-2">
+        <span>{low}</span>
+        <span>Ideal</span>
+        <span>{high}</span>
       </div>
     </div>
   )
 }
 
-function Action({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+function Action({
+  children, onClick, onPointerDown, onPointerUp, onPointerCancel,
+}: {
+  children: React.ReactNode
+  onClick?: () => void
+  onPointerDown?: () => void
+  onPointerUp?: () => void
+  onPointerCancel?: () => void
+}) {
   return (
-    <button type="button" onClick={onClick} className="h-8 rounded-md border border-olive/30 bg-olive-soft px-3 text-[12px] font-medium text-olive focus:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+    <button
+      type="button"
+      onClick={onClick}
+      onPointerDown={event => {
+        if (!onPointerDown) return
+        try { event.currentTarget.setPointerCapture(event.pointerId) } catch { /* already released */ }
+        onPointerDown()
+      }}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
+      className="btn-stamp inline-flex h-9 items-center border-2 border-ink bg-ink px-3 font-mono text-[13px] font-bold uppercase tracking-wide text-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      style={{ ['--btn-shadow' as string]: '2px 2px 0 #66765C' }}
+    >
       {children}
     </button>
   )
@@ -798,7 +864,12 @@ function Action({ children, onClick }: { children: React.ReactNode; onClick: () 
 
 function Quiet({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="h-8 rounded-md border border-border bg-canvas px-2 text-[12px] font-medium text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+    <button
+      type="button"
+      onClick={onClick}
+      className="btn-stamp inline-flex h-9 items-center border-2 border-ink bg-surface px-3 font-mono text-[13px] font-bold uppercase tracking-wide text-ink hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      style={{ ['--btn-shadow' as string]: '2px 2px 0 #A9AB9F' }}
+    >
       {children}
     </button>
   )

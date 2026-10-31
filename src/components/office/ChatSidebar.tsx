@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import type { Message, SharedLink, User, OnlineUser } from '../../types'
-import { Send, ExternalLink, X } from 'lucide-react'
+import { Coffee, Send, ExternalLink, SmilePlus, Timer, X } from 'lucide-react'
 import AvatarSprite from '../ui/AvatarSprite'
 
 type DmMsg = { id: string; from: string; text: string; ts: number }
@@ -117,31 +117,43 @@ export default function ChatSidebar({
             className="text-ink-3 hover:text-ink transition-colors text-[18px] leading-none mr-1"
             aria-label="Back to chat"
           >←</button>
-          <AvatarSprite config={dmUser.user.avatar} status={dmUser.user.status} name={dmUser.user.name} size={28} />
+          <AvatarSprite config={dmUser.user.avatar} status={dmUser.user.status} name="" size={28} />
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-semibold text-ink leading-tight truncate">{dmUser.user.name}</p>
-            <p className="text-[11px] text-ink-3 leading-tight">{STATUS_LABEL[dmUser.user.status]}</p>
+            <p className="text-[13px] leading-tight text-ink-2">{STATUS_LABEL[dmUser.user.status]}</p>
           </div>
           {onHide && <HideChatButton onHide={onHide} />}
         </div>
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-3 py-2 flex flex-col gap-2 min-h-0">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2">
           {thread.length === 0 && (
-            <p className="text-center text-[12px] text-ink-3 mt-6">
+            <p className="mt-6 text-center text-[14px] text-ink-2">
               Start a conversation with {dmUser.user.name.split(' ')[0]}
             </p>
           )}
-          {thread.map(msg => (
-            <div key={msg.id} className={`flex flex-col ${msg.from === 'You' ? 'items-end' : 'items-start'}`}>
-              <div className={`px-3 py-2 text-[13px] leading-relaxed rounded-xl max-w-[85%] ${
-                msg.from === 'You'
-                  ? 'rounded-br-sm bg-olive-soft text-ink border border-olive/20'
-                  : 'rounded-bl-sm bg-muted text-ink border border-border'
-              }`}>
-                {msg.text}
+          {thread.map((msg, index) => {
+            const mine = msg.from === 'You'
+            const continued = index > 0 && thread[index - 1].from === msg.from
+            const time = new Date(msg.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            return (
+              <div key={msg.id} className={`flex items-start gap-2 ${continued ? 'mt-1.5' : 'mt-3 first:mt-0'} ${mine ? 'justify-end' : ''}`}>
+                {!mine && (
+                  <span className="flex h-8 w-8 shrink-0 items-start justify-center">
+                    {!continued && (
+                      <AvatarSprite config={dmUser.user.avatar} status={dmUser.user.status} name="" size={96} style={{ width: 32, height: 32 }} />
+                    )}
+                  </span>
+                )}
+                <div className={`flex max-w-[85%] flex-col ${mine ? 'items-end' : 'items-start'}`}>
+                  <div className={`relative w-fit max-w-full break-words px-2.5 py-1.5 text-[15px] leading-snug text-ink [overflow-wrap:anywhere] ${bubbleClass(mine)}`}>
+                    <BubbleCorner mine={mine} />
+                    {msg.text}
+                  </div>
+                  {mine && <time className="mt-1 text-[12px] text-ink-2">{time}</time>}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
           <div ref={dmEndRef} />
         </div>
         {/* Input */}
@@ -199,18 +211,24 @@ export default function ChatSidebar({
       {/* Chat tab */}
       {tab === 'chat' && (
         <>
-          <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
-            {messages.map(msg => (
-              <MessageItem
-                key={msg.id}
-                msg={msg}
-                isOwn={msg.authorId === currentUser.id}
-                onReact={emoji => onReact(msg.id, emoji)}
-                showEmojiPicker={emojiPickerFor === msg.id}
-                onToggleEmojiPicker={() => setEmojiPickerFor(v => v === msg.id ? null : msg.id)}
-                formatTime={formatTime}
-              />
-            ))}
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden p-3">
+            {messages.map((msg, index) => {
+              const prev = messages[index - 1]
+              const continued = !!prev && prev.type !== 'system' && msg.type !== 'system' && prev.authorId === msg.authorId
+              return (
+                <MessageItem
+                  key={msg.id}
+                  msg={msg}
+                  isOwn={msg.authorId === currentUser.id}
+                  continued={continued}
+                  currentUserId={currentUser.id}
+                  onReact={emoji => onReact(msg.id, emoji)}
+                  showEmojiPicker={emojiPickerFor === msg.id}
+                  onToggleEmojiPicker={() => setEmojiPickerFor(v => v === msg.id ? null : msg.id)}
+                  formatTime={formatTime}
+                />
+              )
+            })}
             <div ref={messagesEndRef} />
           </div>
 
@@ -316,83 +334,154 @@ export default function ChatSidebar({
   )
 }
 
+const bubbleClass = (mine: boolean) =>
+  mine
+    ? 'rounded-[4px] rounded-br-none border border-[#c5d0bc] bg-olive-soft'
+    : 'rounded-[4px] rounded-tl-none border border-border bg-muted'
+
+function BubbleCorner({ mine }: { mine: boolean }) {
+  if (mine) {
+    return (
+      <>
+        <span aria-hidden className="pointer-events-none absolute -bottom-px -right-[7px] h-[9px] w-[8px] bg-[#c5d0bc]" style={{ clipPath: 'polygon(0 0, 100% 100%, 0 100%)' }} />
+        <span aria-hidden className="pointer-events-none absolute bottom-0 -right-[6px] h-[7px] w-[7px] bg-olive-soft" style={{ clipPath: 'polygon(0 0, 100% 100%, 0 100%)' }} />
+      </>
+    )
+  }
+  return (
+    <>
+      <span aria-hidden className="pointer-events-none absolute -left-[7px] -top-px h-[9px] w-[8px] bg-border" style={{ clipPath: 'polygon(100% 0, 100% 100%, 0 0)' }} />
+      <span aria-hidden className="pointer-events-none absolute -left-[6px] top-0 h-[7px] w-[7px] bg-muted" style={{ clipPath: 'polygon(100% 0, 100% 100%, 0 0)' }} />
+    </>
+  )
+}
+
 interface MessageItemProps {
   msg: Message
   isOwn: boolean
+  continued: boolean
+  currentUserId: string
   onReact: (emoji: string) => void
   showEmojiPicker: boolean
   onToggleEmojiPicker: () => void
   formatTime: (iso: string) => string
 }
 
-function MessageItem({ msg, isOwn, onReact, showEmojiPicker, onToggleEmojiPicker, formatTime }: MessageItemProps) {
-  const hasReactions = Object.keys(msg.reactions).length > 0
+function MessageItem({ msg, isOwn, continued, currentUserId, onReact, showEmojiPicker, onToggleEmojiPicker, formatTime }: MessageItemProps) {
+  const gap = continued ? 'mt-1.5' : 'mt-3 first:mt-0'
+  if (msg.type === 'system') return <SystemNote text={msg.content} className={gap} />
 
-  return (
-    <div className={`group relative ${isOwn ? 'items-end' : 'items-start'} flex flex-col`}>
-      {!isOwn && (
-        <div className="flex items-center gap-1.5 mb-1">
-          <AvatarSprite config={msg.authorAvatar} status="online" name={msg.authorName} size={18} />
-          <span className="type-small font-medium text-ink">{msg.authorName}</span>
-          <span className="type-small text-ink-3">{formatTime(msg.timestamp)}</span>
+  const entries = Object.entries(msg.reactions).filter(([, users]) => users.length > 0)
+
+  const body = (
+    <div className={`min-w-0 max-w-full ${isOwn ? 'flex flex-col items-end' : ''}`}>
+      <div className={`relative w-fit max-w-full break-words px-2.5 py-1.5 pr-7 text-[15px] leading-snug text-ink [overflow-wrap:anywhere] ${bubbleClass(isOwn)}`}>
+        <BubbleCorner mine={isOwn} />
+        {msg.content}
+        {msg.linkPreview && (
+          <a
+            href={msg.linkPreview.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 block break-words border border-border bg-surface p-2 [overflow-wrap:anywhere] hover:border-border-strong"
+          >
+            <p className="text-[14px] font-medium leading-snug text-ink">{msg.linkPreview.title}</p>
+            {msg.linkPreview.description && (
+              <p className="mt-0.5 line-clamp-2 text-[13px] leading-5 text-ink-2">{msg.linkPreview.description}</p>
+            )}
+            <p className="mt-1 text-[12px] text-ink-2">{msg.linkPreview.domain}</p>
+          </a>
+        )}
+        <button
+          type="button"
+          aria-label="Add reaction"
+          aria-expanded={showEmojiPicker}
+          onClick={onToggleEmojiPicker}
+          className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center border border-border bg-surface text-ink-2 opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          <SmilePlus size={13} />
+        </button>
+      </div>
+      {entries.length > 0 && (
+        <div className={`relative z-[1] -mt-1.5 flex flex-wrap gap-1 ${isOwn ? 'justify-end pr-1' : 'pl-1'}`}>
+          {entries.map(([emoji, users]) => {
+            const mine = users.includes(currentUserId)
+            return (
+              <button
+                key={emoji}
+                type="button"
+                onClick={() => onReact(emoji)}
+                aria-pressed={mine}
+                className={`flex items-center gap-1 border px-1.5 py-0.5 text-[12px] focus:outline-none focus-visible:ring-2 focus-visible:ring-focus ${
+                  mine ? 'border-olive bg-olive-soft text-ink' : 'border-border bg-surface text-ink hover:border-olive/40'
+                }`}
+              >
+                <span>{emoji}</span>
+                <span className="text-[12px] text-ink-2">{users.length}</span>
+              </button>
+            )
+          })}
         </div>
       )}
-
-      <div className={`relative max-w-[85%] ${isOwn ? 'self-end' : 'self-start'}`}>
-        <div className={`
-          rounded-xl px-3 py-2 text-[13px] leading-relaxed
-          ${isOwn
-            ? 'rounded-br-sm bg-olive-soft text-ink border border-olive/20'
-            : 'rounded-bl-sm bg-muted text-ink border border-border'}
-          ${msg.type === 'system' ? 'bg-clay-soft border border-clay/20 text-clay text-[12px] italic text-center' : ''}
-        `}>
-          {msg.content}
-          {msg.linkPreview && (
-            <a
-              href={msg.linkPreview.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block mt-2 rounded-lg border border-border p-2 hover:border-border-strong transition-colors bg-surface"
-            >
-              <p className="type-label text-ink leading-snug">{msg.linkPreview.title}</p>
-              {msg.linkPreview.description && (
-                <p className="type-small text-ink-2 mt-0.5 line-clamp-2">{msg.linkPreview.description}</p>
-              )}
-              <p className="type-small text-ink-3 mt-1">{msg.linkPreview.domain}</p>
-            </a>
-          )}
-        </div>
-        {isOwn && <p className="type-small text-ink-3 text-right mt-0.5">{formatTime(msg.timestamp)}</p>}
-      </div>
-
-      {hasReactions && (
-        <div className="flex flex-wrap gap-1 mt-1 px-1">
-          {Object.entries(msg.reactions).map(([emoji, users]) => (
+      {showEmojiPicker && (
+        <div className="mt-1 flex max-w-full flex-wrap gap-0.5 border border-border bg-surface p-1" role="group" aria-label="Reactions">
+          {QUICK_EMOJI.map(emoji => (
             <button
               key={emoji}
-              onClick={() => onReact(emoji)}
-              className="text-[12px] bg-muted border border-border rounded-full px-2 py-0.5 hover:bg-olive-soft hover:border-olive/30 transition-colors flex items-center gap-1"
+              type="button"
+              onClick={() => { onReact(emoji); onToggleEmojiPicker() }}
+              className="flex h-7 w-7 items-center justify-center text-[14px] hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              aria-label={`React with ${emoji}`}
             >
-              <span>{emoji}</span>
-              <span className="text-ink-3 text-[10px]">{users.length}</span>
+              {emoji}
             </button>
           ))}
         </div>
       )}
+    </div>
+  )
 
-      {/* Hover emoji picker */}
-      <div className="absolute -top-8 right-0 hidden group-hover:flex items-center gap-1 bg-surface border border-border rounded-lg px-2 py-1 z-10 shadow-md">
-        {QUICK_EMOJI.map(e => (
-          <button
-            key={e}
-            onClick={() => { onReact(e); onToggleEmojiPicker() }}
-            className="text-[13px] hover:scale-125 transition-transform"
-            aria-label={`React with ${e}`}
-          >
-            {e}
-          </button>
-        ))}
+  if (isOwn) {
+    return (
+      <div className={`group flex justify-end ${gap}`}>
+        <div className="flex max-w-[85%] flex-col items-end">
+          {body}
+          <time className="mt-1 text-[12px] leading-4 text-ink-2">{formatTime(msg.timestamp)}</time>
+        </div>
       </div>
+    )
+  }
+
+  return (
+    <div className={`group grid grid-cols-[32px_minmax(0,1fr)] items-start gap-x-2 ${gap}`}>
+      {!continued && (
+        <div className="col-start-2 mb-1 flex min-w-0 items-baseline gap-2">
+          <span className="truncate text-[14px] font-medium leading-5 text-ink">{msg.authorName}</span>
+          <time className="shrink-0 text-[12px] leading-4 text-ink-2">{formatTime(msg.timestamp)}</time>
+        </div>
+      )}
+      <div className={`col-start-1 self-start ${continued ? 'row-start-1' : 'row-start-2'}`}>
+        {!continued && (
+          <AvatarSprite config={msg.authorAvatar} status="online" name="" size={96} style={{ width: 32, height: 32 }} />
+        )}
+      </div>
+      <div className={`col-start-2 min-w-0 max-w-[92%] ${continued ? 'row-start-1' : 'row-start-2'}`}>
+        {body}
+      </div>
+    </div>
+  )
+}
+
+function SystemNote({ text, className }: { text: string; className?: string }) {
+  const focus = /focus/i.test(text)
+  const coffee = /coffee|break/i.test(text)
+  return (
+    <div className={`flex justify-center ${className ?? ''}`} role="status">
+      <p className="inline-flex max-w-[92%] items-center gap-1.5 border border-border bg-muted px-2.5 py-1 text-center text-[13px] leading-5 text-ink-2">
+        {focus && <Timer size={13} className="shrink-0 text-olive" aria-hidden />}
+        {coffee && !focus && <Coffee size={13} className="shrink-0 text-olive" aria-hidden />}
+        <span className="break-words [overflow-wrap:anywhere]">{text}</span>
+      </p>
     </div>
   )
 }

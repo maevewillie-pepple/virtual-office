@@ -1,6 +1,6 @@
 import React from 'react'
 import type { Office, OnlineUser, User } from '../../types'
-import { UserPlus, PanelRightClose, PanelRightOpen, Settings } from 'lucide-react'
+import { UserPlus, PanelRightClose, PanelRightOpen, Settings, Bell, ListTodo } from 'lucide-react'
 import { IconButton } from '../ui/Button'
 import AvatarSprite from '../ui/AvatarSprite'
 
@@ -10,12 +10,18 @@ interface OfficeTopNavProps {
   currentUser: User
   onInvite: () => void
   onSettings: () => void
+  onDashboard?: () => void
+  onOpenTasks: () => void
+  onToggleNotices: () => void
+  noticesOpen: boolean
+  unreadCount: number
   onToggleSidebar: () => void
   sidebarOpen: boolean
 }
 
 export default function OfficeTopNav({
-  office, onlineUsers, currentUser, onInvite, onSettings, onToggleSidebar, sidebarOpen
+  office, onlineUsers, currentUser, onInvite, onSettings, onDashboard,
+  onOpenTasks, onToggleNotices, noticesOpen, unreadCount, onToggleSidebar, sidebarOpen,
 }: OfficeTopNavProps) {
   return (
     <nav
@@ -87,6 +93,43 @@ export default function OfficeTopNav({
           }
           <span>{sidebarOpen ? 'Hide chat' : 'Show chat'}</span>
         </button>
+        <button
+          type="button"
+          onClick={onOpenTasks}
+          className="flex items-center gap-1.5 h-8 px-2.5 rounded-[6px] border border-border bg-surface text-[12px] font-medium text-ink-2
+            hover:bg-muted hover:text-ink transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          <ListTodo size={15} strokeWidth={1.75} />
+          <span>Tasks</span>
+        </button>
+        <button
+          type="button"
+          data-notices-toggle
+          onClick={onToggleNotices}
+          aria-expanded={noticesOpen}
+          aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+          title="Notifications"
+          className="relative flex items-center h-8 px-2.5 rounded-[6px] border border-border bg-surface text-[12px] font-medium text-ink-2
+            hover:bg-muted hover:text-ink transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          <Bell size={15} strokeWidth={1.75} />
+          {unreadCount > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-olive px-1 text-[10px] font-semibold text-surface">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
+        </button>
+        {onDashboard && (
+          <button
+            type="button"
+            onClick={onDashboard}
+            title={`${currentUser.name}'s dashboard`}
+            className="flex items-center h-8 px-3 rounded-[6px] border border-border bg-surface text-[12px] font-medium text-ink-2
+              hover:bg-muted hover:text-ink transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          >
+            Dashboard
+          </button>
+        )}
         <IconButton label="Office settings" onClick={onSettings}>
           <Settings size={16} strokeWidth={1.75} className="text-ink-2" />
         </IconButton>

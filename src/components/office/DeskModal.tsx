@@ -15,11 +15,12 @@ interface DeskModalProps {
   onSit: () => void
   onKnock: () => void
   onLeaveNote: (text: string) => void
+  onOpenTasks?: () => void
   note?: string
 }
 
 export default function DeskModal({
-  desk, currentUser, isOpen, onClose, onClaim, onRelease, onStartFocus, onSit, onKnock, onLeaveNote, note,
+  desk, currentUser, isOpen, onClose, onClaim, onRelease, onStartFocus, onSit, onKnock, onLeaveNote, onOpenTasks, note,
 }: DeskModalProps) {
   const [draft, setDraft] = useState('')
   if (!desk) return null
@@ -68,6 +69,9 @@ export default function DeskModal({
 
           {isMyDesk && (
             <>
+              <Button className="w-full" icon={<Monitor size={14} strokeWidth={1.75} />} onClick={() => onOpenTasks?.()}>
+                Task board
+              </Button>
               <Button variant="secondary" className="w-full" onClick={() => { onSit(); onClose() }}>
                 Sit down
               </Button>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { DiscussionDoc, DiscussionTopic, TopicCategory } from '../../collaboration/store'
 import {
   activeSession, castVote, discussionKey, loadDiscussion, saveDiscussion, subscribeCollab, voteCounts,
@@ -27,16 +27,17 @@ interface MeetingHubProps {
   onJoinSeat: () => boolean
   onLeaveSeat: () => void
   onClose: () => void
+  joinOnOpen?: boolean
 }
 
 type Tab = 'topics' | 'live' | 'history'
 type Sort = 'popular' | 'newest' | 'discussed'
 
 export default function MeetingHub({
-  officeId, designId, roomId, userId, userName, canModerate, anchor, onJoinSeat, onLeaveSeat, onClose,
+  officeId, designId, roomId, userId, userName, canModerate, anchor, onJoinSeat, onLeaveSeat, onClose, joinOnOpen = false,
 }: MeetingHubProps) {
   const [doc, setDoc] = useState<DiscussionDoc>(() => loadDiscussion(officeId, designId, roomId))
-  const [tab, setTab] = useState<Tab>('topics')
+  const [tab, setTab] = useState<Tab>(joinOnOpen ? 'live' : 'topics')
   const [sort, setSort] = useState<Sort>('popular')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -51,7 +52,24 @@ export default function MeetingHub({
   const [clock, setClock] = useState('')
 
   const refresh = () => setDoc(loadDiscussion(officeId, designId, roomId))
+  const joinSeatRef = useRef(onJoinSeat)
+  joinSeatRef.current = onJoinSeat
   useEffect(() => subscribeCollab([discussionKey(officeId, designId, roomId)], refresh), [officeId, designId, roomId])
+  useEffect(() => {
+    if (!joinOnOpen) return
+    const current = activeSession(loadDiscussion(officeId, designId, roomId))
+    if (!current || current.participants.some(person => person.id === userId)) return
+    const seated = joinSeatRef.current()
+    const next = loadDiscussion(officeId, designId, roomId)
+    const session = activeSession(next)
+    if (!session || session.participants.some(person => person.id === userId)) return
+    setDoc(saveDiscussion(officeId, designId, roomId, {
+      ...next,
+      sessions: next.sessions.map(item => item.id === session.id
+        ? { ...item, participants: [...item.participants, { id: userId, name: userName, seated }] }
+        : item),
+    }))
+  }, [joinOnOpen, officeId, designId, roomId, userId, userName])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
