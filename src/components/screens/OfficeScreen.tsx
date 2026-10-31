@@ -32,6 +32,7 @@ import { ToastContainer, useToasts } from '../ui/Toast'
 import type { FocusHistoryEntry } from '../../types'
 import { loadMusicPreferences, loadOfficeMusic, parseJamInvite, parseSpotifyContent, saveMusicPreferences, saveOfficeMusic, spotifyKindLabel, spotifyOpenUrl } from '../../utils/spotify'
 import { isRemoteConfigured, isUuid } from '../../remote/client'
+import { inviteLabel, inviteLink } from '../../utils/invite'
 import { claimRemoteDesk, renameRemoteOffice } from '../../remote/account'
 import { loadOfficeMessages, saveReaction, sendOfficeMessage, subscribeOfficeMessages } from '../../remote/messages'
 import { joinPresence, presenceToOnline, type PresencePayload } from '../../remote/presence'
@@ -1343,11 +1344,11 @@ export default function OfficeScreen({ office: officeProp, account, membershipRo
             <h2 className="type-h3 text-ink mb-4">Invite to {officeName}</h2>
             <div className="flex gap-2 mb-4">
               <div className="flex-1 bg-muted border border-border px-3 py-2 type-small text-ink-2 font-mono truncate">
-                sidedesk.app/join/{office.inviteCode}
+                {inviteLabel(office.inviteCode)}
               </div>
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(`https://sidedesk.app/join/${office.inviteCode}`)
+                  navigator.clipboard.writeText(inviteLink(office.inviteCode))
                   addToast('Invite link copied!', 'success')
                   setShowInvite(false)
                 }}

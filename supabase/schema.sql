@@ -256,19 +256,22 @@ security definer
 set search_path = public
 as $$
 declare
-  found public.offices;
+  office_row public.offices;
+  code text;
 begin
   if auth.uid() is null then
     raise exception 'Sign in required';
   end if;
-  select * into found from public.offices where invite_code = upper(btrim(p_code));
+  code := upper(btrim(p_code));
+  code := regexp_replace(code, '^.*/JOIN/', '');
+  select * into office_row from public.offices where invite_code = code;
   if not found then
     raise exception 'No office uses that code';
   end if;
   insert into public.memberships (user_id, office_id, role)
-  values (auth.uid(), found.id, 'member')
+  values (auth.uid(), office_row.id, 'member')
   on conflict (user_id, office_id) do nothing;
-  return found;
+  return office_row;
 end;
 $$;
 

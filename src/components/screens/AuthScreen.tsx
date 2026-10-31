@@ -8,12 +8,14 @@ interface AuthScreenProps {
   configured: boolean
   onAuthenticated: (user: User, mode: 'signin' | 'signup') => void
   onLocalAuth: (name: string, email: string) => void
+  onDemo?: () => void
+  notice?: string
   onBack: () => void
 }
 
 type Mode = 'signin' | 'signup'
 
-export default function AuthScreen({ configured, onAuthenticated, onLocalAuth, onBack }: AuthScreenProps) {
+export default function AuthScreen({ configured, onAuthenticated, onLocalAuth, onDemo, notice, onBack }: AuthScreenProps) {
   const [mode, setMode] = useState<Mode>('signin')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -63,6 +65,7 @@ export default function AuthScreen({ configured, onAuthenticated, onLocalAuth, o
           <div className="text-center mb-6">
             <img src="/logo.png" alt="" width={96} height={92} className="mx-auto mb-2.5 h-24 w-24 object-contain [image-rendering:pixelated]" />
             <h1 className="type-h3 text-ink">Side desk</h1>
+            {notice && <p className="mt-3 text-[13px] leading-5 text-ink-2">{notice}</p>}
           </div>
 
           <div className="flex gap-1 mb-5 bg-muted p-1">
@@ -134,6 +137,12 @@ export default function AuthScreen({ configured, onAuthenticated, onLocalAuth, o
               {mode === 'signin' ? 'Sign in' : 'Create account'}
             </Button>
           </form>
+
+          {onDemo && (
+            <Button type="button" variant="secondary" className="w-full mt-3" onClick={onDemo}>
+              Demo sign in
+            </Button>
+          )}
 
           <p className="text-center type-small text-ink-3 mt-5">
             {configured

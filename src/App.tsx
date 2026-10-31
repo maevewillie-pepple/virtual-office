@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { AvatarConfig, Office, OfficeArtTheme, OfficeMembership, OfficeTheme, User } from './types'
-import { demoAvatars, demoOffices } from './data/mockData'
+import { demoAvatars, demoOffices, demoUsers } from './data/mockData'
 import { isRemoteConfigured, isUuid } from './remote/client'
 import { createRemoteOffice, loadMyOffices, restoreSession, saveProfile, signOut, watchSession } from './remote/account'
 import { hydratePersonal } from './remote/sync'
 import { importLocalOffices, officesWaitingToImport } from './remote/importLocal'
+import { inviteCodeFromInput, inviteCodeFromPath } from './utils/invite'
 
 import LandingScreen from './components/screens/LandingScreen'
 import AuthScreen from './components/screens/AuthScreen'
@@ -73,6 +74,9 @@ function marketingPage(screen: Screen): MarketingPage | null {
 
 export default function App() {
   const remote = isRemoteConfigured()
+  const localhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  const [demoMode, setDemoMode] = useState(false)
+  const live = remote && !demoMode
   const savedUser = remote ? null : loadPersistedUser()
   const [ready, setReady] = useState(!remote)
   const [screen, setScreen] = useState<Screen>(savedUser ? 'dashboard' : 'landing')
@@ -83,11 +87,14 @@ export default function App() {
   const [roles, setRoles] = useState<Record<string, OfficeMembership>>({})
   const [importReady, setImportReady] = useState(false)
   const [activeOfficeId, setActiveOfficeId] = useState(remote ? (loadLastVisitedId() ?? '') : loadActiveOfficeId)
+  const [joinCode, setJoinCode] = useState<string | null>(() => inviteCodeFromPath())
+  const [holdInvite, setHoldInvite] = useState(false)
+  const inviteStarted = useRef(false)
 
-  const offices = remote
+  const offices = live
     ? createdOffices
     : [...demoOffices, ...createdOffices.filter(office => !demoOffices.some(demo => demo.id === office.id))]
-  const activeOffice = offices.find(office => office.id === activeOfficeId) ?? (remote ? undefined : offices[0])
+  const activeOffice = offices.find(office => office.id === activeOfficeId) ?? (live ? undefined : offices[0])
 
   const rememberOffices = (records: { office: Office; role: OfficeMembership }[]) => {
     setCreatedOffices(records.map(item => item.office))
@@ -132,35 +139,52 @@ export default function App() {
     setScreen('avatar')
   }
 
+  const handleDemo = () => {
+    setDemoMode(true)
+    setCurrentUser(demoUsers[0])
+    setCreatedOffices(loadCreatedOffices())
+    setRoles({})
+    setScreen('dashboard')
+  }
+
   const handleAuthenticated = (user: User, mode: 'signin' | 'signup') => {
     setCurrentUser(user)
     setImportReady(officesWaitingToImport().length > 0)
     void hydratePersonal(user.id)
     void loadMyOffices().then(rememberOffices).catch(() => {})
     setAvatarBack('auth')
-    setScreen(mode === 'signup' ? 'avatar' : 'dashboard')
+    if (mode === 'signup') {
+      if (joinCode) setHoldInvite(true)
+      setScreen('avatar')
+      return
+    }
+    if (!joinCode) setScreen('dashboard')
   }
 
   const handleAvatarSave = (config: AvatarConfig, name: string) => {
     if (!currentUser) return
     const updated = { ...currentUser, avatar: config, name }
     setCurrentUser(updated)
-    if (remote && isUuid(updated.id)) void saveProfile(updated)
-    else savePersistedUser(updated)
+    if (live && isUuid(updated.id)) void saveProfile(updated)
+    else if (!demoMode) savePersistedUser(updated)
+    setHoldInvite(false)
+    if (joinCode) return
     setScreen(authIntent === 'office' ? 'create_office' : 'dashboard')
   }
 
   const enterOffice = (officeId: string) => {
     setActiveOfficeId(officeId)
-    try { localStorage.setItem(ACTIVE_KEY, officeId) } catch {}
+    if (!demoMode) {
+      try { localStorage.setItem(ACTIVE_KEY, officeId) } catch {}
+    }
     setScreen('office')
   }
 
-  const handleCreate = async (draft: { name: string; description: string; theme: string; layout: OfficeArtTheme; inviteCode: string }) => {
+  const handleCreate = async (draft: { name: string; description: string; theme: string; layout: OfficeArtTheme; inviteCode: string }): Promise<string> => {
     const layout: OfficeArtTheme = draft.layout
     const theme: OfficeTheme = layout === 'library' ? 'quiet_library' : layout === 'loft' ? 'creative_loft' : 'cosy_studio'
     const coverEmoji = layout === 'library' ? '📚' : layout === 'loft' ? '🪟' : layout === 'studio' ? '🌿' : layout === 'lab' ? '⚗️' : '🏢'
-    if (remote && currentUser && isUuid(currentUser.id)) {
+    if (live && currentUser && isUuid(currentUser.id)) {
       const record = await createRemoteOffice({
         name: draft.name.trim() || 'New office',
         description: draft.description.trim() || 'A new room',
@@ -171,8 +195,7 @@ export default function App() {
       })
       setCreatedOffices(prev => [...prev.filter(item => item.id !== record.office.id), record.office])
       setRoles(prev => ({ ...prev, [record.office.id]: record.role }))
-      enterOffice(record.office.id)
-      return
+      return record.office.id
     }
     const office: Office = {
       id: `office_${Date.now()}`,
@@ -189,9 +212,45 @@ export default function App() {
     }
     const next = [...createdOffices, office]
     setCreatedOffices(next)
-    try { localStorage.setItem(CREATED_KEY, JSON.stringify(next)) } catch {}
-    enterOffice(office.id)
+    if (!demoMode) {
+      try { localStorage.setItem(CREATED_KEY, JSON.stringify(next)) } catch {}
+    }
+    return office.id
   }
+
+  useEffect(() => {
+    if (!ready || currentUser || !joinCode) return
+    setScreen('auth')
+  }, [ready, currentUser, joinCode])
+
+  useEffect(() => {
+    if (!ready || !currentUser || !joinCode || holdInvite || inviteStarted.current) return
+    inviteStarted.current = true
+    const code = inviteCodeFromInput(joinCode)
+    setJoinCode(null)
+    if (inviteCodeFromPath()) window.history.replaceState({}, '', '/')
+    const asLive = remote && !demoMode && isUuid(currentUser.id)
+    void (async () => {
+      try {
+        if (asLive) {
+          enterOffice(await handleJoin(code))
+          return
+        }
+        const pool = [...demoOffices, ...loadCreatedOffices()]
+        const match = pool.find(office => office.inviteCode?.toUpperCase() === code.toUpperCase())
+        if (!match) {
+          setScreen('dashboard')
+          return
+        }
+        if (!demoOffices.some(office => office.id === match.id)) {
+          setCreatedOffices(prev => prev.some(office => office.id === match.id) ? prev : [...prev, match])
+        }
+        enterOffice(match.id)
+      } catch {
+        setScreen('dashboard')
+      }
+    })()
+  }, [ready, currentUser, joinCode, holdInvite, demoMode, remote])
 
   const handleJoin = async (code: string) => {
     const { joinRemoteOffice } = await import('./remote/account')
@@ -208,6 +267,14 @@ export default function App() {
   }
 
   const handleLogout = () => {
+    if (demoMode) {
+      setDemoMode(false)
+      setCurrentUser(null)
+      setCreatedOffices([])
+      setRoles({})
+      setScreen('landing')
+      return
+    }
     if (remote) void signOut()
     else {
       try { localStorage.removeItem('vo_user') } catch {}
@@ -221,10 +288,14 @@ export default function App() {
   }
 
   const updateName = (name: string) => {
-    if (remote && currentUser && isUuid(currentUser.id)) {
+    if (live && currentUser && isUuid(currentUser.id)) {
       const updated = { ...currentUser, name }
       setCurrentUser(updated)
       void saveProfile(updated)
+      return
+    }
+    if (demoMode && currentUser) {
+      setCurrentUser({ ...currentUser, name })
       return
     }
     const base = currentUser ?? {
@@ -292,6 +363,8 @@ export default function App() {
             configured={remote}
             onAuthenticated={handleAuthenticated}
             onLocalAuth={handleAuth}
+            onDemo={localhost ? handleDemo : undefined}
+            notice={joinCode ? 'Sign in to open this office.' : undefined}
             onBack={() => setScreen('landing')}
           />
         )}
@@ -319,8 +392,8 @@ export default function App() {
               onHome={() => setScreen('landing')}
               lastVisitedId={loadLastVisitedId()}
               roles={roles}
-              onJoinCode={remote ? handleJoin : undefined}
-              onImport={importReady ? handleImport : undefined}
+              onJoinCode={live ? handleJoin : undefined}
+              onImport={live && importReady ? handleImport : undefined}
             />
           </div>
         )}
@@ -328,6 +401,7 @@ export default function App() {
           <div className="overflow-auto h-full">
             <CreateOfficeScreen
               onCreated={handleCreate}
+              onEnter={enterOffice}
               onBack={() => setScreen('dashboard')}
             />
           </div>

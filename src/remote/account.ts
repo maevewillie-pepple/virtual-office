@@ -1,5 +1,6 @@
 import type { AvatarConfig, Office, OfficeArtTheme, OfficeMembership, OfficeTheme, User } from '../types'
 import { isUuid, supabase } from './client'
+import { inviteCodeFromInput } from '../utils/invite'
 
 const THEMES: OfficeTheme[] = ['cosy_studio', 'creative_loft', 'quiet_library']
 const LAYOUTS: OfficeArtTheme[] = ['classic', 'library', 'loft', 'studio', 'lab']
@@ -177,10 +178,11 @@ export async function createRemoteOffice(draft: {
 }
 
 export async function joinRemoteOffice(code: string): Promise<OfficeRecord> {
-  const { error } = await db().rpc('join_office', { p_code: code })
+  const normalized = inviteCodeFromInput(code)
+  const { error } = await db().rpc('join_office', { p_code: normalized })
   if (error) throw new Error(error.message)
   const offices = await loadMyOffices()
-  const match = offices.find(item => item.office.inviteCode.toUpperCase() === code.trim().toUpperCase())
+  const match = offices.find(item => item.office.inviteCode.toUpperCase() === normalized.toUpperCase())
   if (!match) throw new Error('No office uses that code.')
   return match
 }

@@ -3,6 +3,7 @@ import { ArrowLeft, Check, Copy, ArrowRight } from 'lucide-react'
 import { OFFICE_DESIGNS, type OfficeDesignId } from '../../data/officeMap'
 import type { OfficeTheme } from '../../types'
 import Button from '../ui/Button'
+import { inviteLabel, inviteLink } from '../../utils/invite'
 
 function themeFor(layout: OfficeDesignId): OfficeTheme {
   if (layout === 'library') return 'quiet_library'
@@ -11,7 +12,8 @@ function themeFor(layout: OfficeDesignId): OfficeTheme {
 }
 
 interface CreateOfficeScreenProps {
-  onCreated: (draft: { name: string; description: string; theme: string; layout: OfficeDesignId; inviteCode: string }) => void | Promise<void>
+  onCreated: (draft: { name: string; description: string; theme: string; layout: OfficeDesignId; inviteCode: string }) => Promise<string> | string
+  onEnter: (officeId: string) => void
   onBack: () => void
 }
 
@@ -20,7 +22,7 @@ type Step = 1 | 2 | 3 | 4
 const inputCls = `w-full h-10 bg-canvas border border-border px-3 text-[14px] text-ink
   placeholder-ink-3 transition-colors focus:outline-none focus:border-olive focus:ring-1 focus:ring-olive/30`
 
-export default function CreateOfficeScreen({ onCreated, onBack }: CreateOfficeScreenProps) {
+export default function CreateOfficeScreen({ onCreated, onEnter, onBack }: CreateOfficeScreenProps) {
   const [step, setStep] = useState<Step>(1)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -32,9 +34,10 @@ export default function CreateOfficeScreen({ onCreated, onBack }: CreateOfficeSc
   const [copied, setCopied] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [officeId, setOfficeId] = useState<string | null>(null)
 
   const copyLink = () => {
-    navigator.clipboard.writeText(`https://sidedesk.app/join/${inviteCode}`)
+    navigator.clipboard.writeText(inviteLink(inviteCode))
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -164,9 +167,24 @@ export default function CreateOfficeScreen({ onCreated, onBack }: CreateOfficeSc
                   </div>
                 </div>
               </div>
+              {error && <p className="text-[13px] leading-5 text-error" role="alert">{error}</p>}
               <div className="flex gap-2">
                 <Button variant="secondary" className="flex-1" onClick={() => setStep(2)}>Back</Button>
-                <Button className="flex-1" onClick={() => setStep(4)}>Create Office</Button>
+                <Button className="flex-1" loading={saving} onClick={() => {
+                  if (officeId) {
+                    setStep(4)
+                    return
+                  }
+                  setSaving(true)
+                  setError('')
+                  Promise.resolve(onCreated({ name, description, theme: themeFor(layout), layout, inviteCode }))
+                    .then(id => {
+                      setOfficeId(id)
+                      setStep(4)
+                    })
+                    .catch(err => setError(err instanceof Error ? err.message : 'Could not create the office.'))
+                    .finally(() => setSaving(false))
+                }}>Create Office</Button>
               </div>
             </div>
           )}
@@ -180,7 +198,7 @@ export default function CreateOfficeScreen({ onCreated, onBack }: CreateOfficeSc
               <div className="bg-muted border border-border rounded-lg p-3 text-left">
                 <p className="type-small text-ink-3 mb-1">Invite link</p>
                 <p className="type-small text-ink font-mono truncate">
-                  sidedesk.app/join/{inviteCode}
+                  {inviteLabel(inviteCode)}
                 </p>
               </div>
               <Button
@@ -191,14 +209,7 @@ export default function CreateOfficeScreen({ onCreated, onBack }: CreateOfficeSc
               >
                 {copied ? 'Copied!' : 'Copy invite link'}
               </Button>
-              {error && <p className="text-[13px] leading-5 text-error" role="alert">{error}</p>}
-              <Button className="w-full" loading={saving} onClick={() => {
-                setSaving(true)
-                setError('')
-                Promise.resolve(onCreated({ name, description, theme: themeFor(layout), layout, inviteCode }))
-                  .catch(err => setError(err instanceof Error ? err.message : 'Could not create the office.'))
-                  .finally(() => setSaving(false))
-              }} icon={<ArrowRight size={14} strokeWidth={1.75} />}>
+              <Button className="w-full" disabled={!officeId} onClick={() => officeId && onEnter(officeId)} icon={<ArrowRight size={14} strokeWidth={1.75} />}>
                 Enter Your Office
               </Button>
             </div>

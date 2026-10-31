@@ -4,6 +4,7 @@ import { demoMemberships, demoUsers } from '../../data/mockData'
 import { OFFICE_DESIGNS, layoutOfOffice } from '../../data/officeMap'
 import { LogIn, MoreHorizontal, Plus, Settings } from 'lucide-react'
 import AvatarSprite from '../ui/AvatarSprite'
+import { inviteCodeFromInput, inviteLink } from '../../utils/invite'
 import {
   drawBookshelf,
   drawChair,
@@ -234,7 +235,7 @@ export default function DashboardScreen({
   useDialog(settingsOpen, () => setSettingsOpen(false), settingsNameRef)
 
   const join = async () => {
-    const trimmed = code.trim()
+    const trimmed = inviteCodeFromInput(code)
     if (!trimmed) {
       setJoinError('Enter an invite code.')
       return
@@ -267,7 +268,7 @@ export default function DashboardScreen({
 
   const copyInvite = async (office: Office) => {
     try {
-      await navigator.clipboard.writeText(`https://sidedesk.app/join/${office.inviteCode}`)
+      await navigator.clipboard.writeText(inviteLink(office.inviteCode))
       setCopiedId(office.id)
       window.setTimeout(() => setCopiedId(current => current === office.id ? null : current), 2000)
     } catch {

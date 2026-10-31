@@ -7,6 +7,7 @@ import Button from '../ui/Button'
 import Tabs from '../ui/Tabs'
 import { Field, TextInput } from '../ui/Field'
 import Badge from '../ui/Badge'
+import { inviteLabel, inviteLink } from '../../utils/invite'
 
 interface OfficeSettingsProps {
   isOpen: boolean
@@ -31,7 +32,7 @@ export default function OfficeSettings({
   const isOwner = office.ownerId === currentUser.id
 
   const copyInvite = () => {
-    navigator.clipboard.writeText(`https://sidedesk.app/join/${office.inviteCode}`)
+    navigator.clipboard.writeText(inviteLink(office.inviteCode))
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -63,7 +64,7 @@ export default function OfficeSettings({
           <Field label="Invite link" hint="Anyone with this link can join from the dashboard.">
             <div className="flex gap-2">
               <div className="flex h-11 min-w-0 flex-1 items-center truncate rounded-[10px] border border-border bg-muted px-3 text-[14px] text-ink-2">
-                sidedesk.app/join/{office.inviteCode}
+                {inviteLabel(office.inviteCode)}
               </div>
               <Button
                 variant={copied ? 'selected' : 'secondary'}
