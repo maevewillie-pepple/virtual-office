@@ -27,7 +27,7 @@ import { activeSession, findLiveMarker, migrateLegacyBoards, readOfficeBoards, r
 import NotificationCentre from '../office/NotificationCentre'
 import { loadNotices, markAllNoticesRead, markNoticeRead, pushNotice, subscribeNotices, type InteractionAction, type OfficeNotice } from '../../office/notices'
 import { seatBesideDesk } from '../../utils/interactions'
-import { PanelRightOpen } from 'lucide-react'
+import { MessageSquare } from 'lucide-react'
 import { ToastContainer, useToasts } from '../ui/Toast'
 import type { FocusHistoryEntry } from '../../types'
 import { loadMusicPreferences, loadOfficeMusic, parseJamInvite, parseSpotifyContent, saveMusicPreferences, saveOfficeMusic, spotifyKindLabel, spotifyOpenUrl } from '../../utils/spotify'
@@ -114,7 +114,17 @@ export default function OfficeScreen({ office: officeProp, account, membershipRo
   }, [designId])
   const rooms = useMemo(() => buildRoomIndex(officeMap.tiles), [officeMap])
 
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.matchMedia('(min-width: 768px)').matches)
+
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 767px)')
+    const closeOnPhone = () => {
+      if (query.matches) setSidebarOpen(false)
+    }
+    closeOnPhone()
+    query.addEventListener('change', closeOnPhone)
+    return () => query.removeEventListener('change', closeOnPhone)
+  }, [])
   const [messages, setMessages] = useState<Message[]>(live ? [] : demoMessages)
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>(() =>
     live
@@ -1045,7 +1055,7 @@ export default function OfficeScreen({ office: officeProp, account, membershipRo
       )}
 
       {/* Main area */}
-      <div className="flex flex-1 min-h-0">
+      <div className="relative flex min-h-0 flex-1">
         {/* Game map */}
         <div className="flex-1 relative min-w-0" style={{ position: 'relative' }}>
           <GameMap
@@ -1152,10 +1162,10 @@ export default function OfficeScreen({ office: officeProp, account, membershipRo
             <button
               type="button"
               onClick={() => setSidebarOpen(true)}
-              className="absolute top-2 right-2 z-30 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-surface text-[12px] font-medium text-ink shadow-sm hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              className="absolute right-2 top-2 z-30 hidden items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[12px] font-medium text-ink shadow-sm hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:flex"
               aria-label="Show chat"
             >
-              <PanelRightOpen size={14} strokeWidth={1.75} />
+              <MessageSquare size={14} strokeWidth={1.75} />
               Chat
             </button>
           )}

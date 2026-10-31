@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import type { User, FocusDuration, CarriedItem } from '../../types'
 import { carriedLabel, isBook } from '../../game/barista/carry'
-import { Timer, Coffee, Music, Smile, X, Pause, Play, History, Package } from 'lucide-react'
-import AvatarSprite from '../ui/AvatarSprite'
+import { Timer, Coffee, Music, Smile, X, Pause, Play, History, Package, Home } from 'lucide-react'
 
 interface BottomToolbarProps {
   currentUser: User
@@ -30,7 +29,7 @@ const REACTION_EMOJIS = ['👋', '❤️', '👏', '😂', '🎉', '🔥', '☕'
 const FOCUS_PRESETS: FocusDuration[] = [25, 50, 90]
 
 export default function BottomToolbar({
-  currentUser, focusSession, onBreak,
+  focusSession, onBreak,
   onStartFocus, onEndFocus, onPauseFocus, onResumeFocus, onToggleBreak,
   onOpenMusic, musicOpen = false, onOpenProfile, onReaction, onOpenFocusHistory,
   carriedItem, onDropItem, onUseItem, focusSignal = 0,
@@ -291,9 +290,7 @@ export default function BottomToolbar({
           aria-label="Open dashboard"
           title="Dashboard"
         >
-          <div className="w-5 h-5 rounded-full overflow-hidden border border-border">
-            <AvatarSprite config={currentUser.avatar} status={currentUser.status} name={currentUser.name} size={20} />
-          </div>
+          <Home size={16} strokeWidth={1.75} className="text-ink-2" />
           <span className="text-[14px] text-ink-2">Dashboard</span>
         </button>
       </div>

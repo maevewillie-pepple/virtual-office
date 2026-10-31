@@ -32,6 +32,9 @@ const STATUS_DOT: Record<string, string> = {
 
 const QUICK_EMOJI = ['👍', '❤️', '😂', '🎉', '👀', '🔥', '☕', '🙌']
 
+const panelClass =
+  'fixed inset-0 z-[60] flex h-dvh w-full flex-col bg-surface md:static md:inset-auto md:z-auto md:h-full md:w-[300px] md:flex-shrink-0 md:border-l md:border-border'
+
 function HideChatButton({ onHide }: { onHide: () => void }) {
   return (
     <button
@@ -106,8 +109,7 @@ export default function ChatSidebar({
     const thread = dmThreads[dmUser.user.id] ?? []
     return (
       <aside
-        className="flex flex-col h-full border-l border-border bg-surface flex-shrink-0"
-        style={{ width: 300 }}
+        className={panelClass}
         aria-label="Direct message panel"
       >
         {/* DM Header */}
@@ -187,8 +189,7 @@ export default function ChatSidebar({
 
   return (
     <aside
-      className="flex flex-col h-full border-l border-border bg-surface flex-shrink-0"
-      style={{ width: 300 }}
+      className={panelClass}
       aria-label="Chat and team panel"
     >
       {/* Tab bar */}
