@@ -303,8 +303,26 @@ export default function OfficeScreen({ office: officeProp, account, membershipRo
     let stopDocs = () => {}
     const room = joinPresence(office.id, presencePayload(), people => {
       const mine = currentUser.id
-      const next = people.map(person => presenceToOnline(person, person.user.id === mine))
-      setOnlineUsers(next.some(person => person.isCurrentUser) ? next : [...next, presenceToOnline(presencePayload(), true)])
+      setOnlineUsers(prev => {
+        const local = prev.find(person => person.isCurrentUser)
+        const next = people.map(person => {
+          const online = presenceToOnline(person, person.user.id === mine)
+          if (!online.isCurrentUser || !local) return online
+          return {
+            ...online,
+            position: local.position,
+            seated: local.seated,
+            sipping: local.sipping,
+            brewing: local.brewing,
+            gaming: local.gaming,
+          }
+        })
+        if (!next.some(person => person.isCurrentUser)) {
+          const self = presenceToOnline(presencePayload(), true)
+          next.push(local ? { ...self, position: local.position, seated: local.seated } : self)
+        }
+        return next
+      })
     })
     presenceRef.current = room
     void loadOfficeMessages(office.id, currentUser.id).then(loaded => {
