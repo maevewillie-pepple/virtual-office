@@ -74,7 +74,7 @@ function marketingPage(screen: Screen): MarketingPage | null {
 
 export default function App() {
   const remote = isRemoteConfigured()
-  const localhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  const showDemo = import.meta.env.DEV && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   const [demoMode, setDemoMode] = useState(false)
   const live = remote && !demoMode
   const savedUser = remote ? null : loadPersistedUser()
@@ -363,7 +363,7 @@ export default function App() {
             configured={remote}
             onAuthenticated={handleAuthenticated}
             onLocalAuth={handleAuth}
-            onDemo={localhost ? handleDemo : undefined}
+            onDemo={showDemo ? handleDemo : undefined}
             notice={joinCode ? 'Sign in to open this office.' : undefined}
             onBack={() => setScreen('landing')}
           />

@@ -138,7 +138,7 @@ export default function AuthScreen({ configured, onAuthenticated, onLocalAuth, o
             </Button>
           </form>
 
-          {onDemo && (
+          {import.meta.env.DEV && onDemo && (
             <Button type="button" variant="secondary" className="w-full mt-3" onClick={onDemo}>
               Demo sign in
             </Button>

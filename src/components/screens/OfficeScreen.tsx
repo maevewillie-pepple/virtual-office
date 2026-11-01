@@ -33,12 +33,23 @@ import type { FocusHistoryEntry } from '../../types'
 import { loadMusicPreferences, loadOfficeMusic, parseJamInvite, parseSpotifyContent, saveMusicPreferences, saveOfficeMusic, spotifyKindLabel, spotifyOpenUrl } from '../../utils/spotify'
 import { isRemoteConfigured, isUuid } from '../../remote/client'
 import { inviteLabel, inviteLink } from '../../utils/invite'
-import { claimRemoteDesk, renameRemoteOffice } from '../../remote/account'
+import { claimRemoteDesk, loadOfficeMembers, renameRemoteOffice } from '../../remote/account'
 import { loadOfficeMessages, saveReaction, sendOfficeMessage, subscribeOfficeMessages } from '../../remote/messages'
 import { joinPresence, presenceToOnline, type PresencePayload } from '../../remote/presence'
 import { hydrateOffice, hydratePersonal, publishFocus, publishNotes, publishPlants, subscribeOfficeDocs } from '../../remote/sync'
 
 const STORAGE_KEY = 'vo_office_state'
+
+function demoRoomMembers(officeId: string, currentUser: User): User[] {
+  const memberIds = new Set(
+    demoMemberships.filter(membership => membership.officeId === officeId).map(membership => membership.userId)
+  )
+  const people = demoUsers
+    .filter(user => memberIds.has(user.id))
+    .map(user => user.id === currentUser.id ? currentUser : user)
+  if (!people.some(user => user.id === currentUser.id)) people.unshift(currentUser)
+  return people
+}
 
 function loadState() {
   try {
@@ -96,11 +107,7 @@ export default function OfficeScreen({ office: officeProp, account, membershipRo
     }
   const savedState = loadState()
   const onsetRoom = roomForOffice(office)
-  const designAdmin = live
-    ? membershipRole === 'owner' || membershipRole === 'admin'
-    : demoMemberships.some(
-      membership => membership.userId === currentUser.id && membership.officeId === office.id && membership.role === 'admin'
-    )
+  const designAdmin = demoOffices.some(item => item.id === office.id)
 
   const [designId, setDesignId] = useState<OfficeDesignId>(() => {
     if (!designAdmin) return onsetRoom
@@ -168,6 +175,23 @@ export default function OfficeScreen({ office: officeProp, account, membershipRo
   const [officeMusic, setOfficeMusic] = useState<OfficeMusicState>(() => loadOfficeMusic(musicKey))
   const [musicPrefs, setMusicPrefs] = useState<MusicPreferences>(() => loadMusicPreferences())
   const [memberships] = useState(demoMemberships)
+  const [roomMembers, setRoomMembers] = useState<User[]>(() => demoRoomMembers(office.id, currentUser))
+
+  useEffect(() => {
+    if (!live) {
+      setRoomMembers(demoRoomMembers(office.id, currentUser))
+      return
+    }
+    let cancel = false
+    void loadOfficeMembers(office.id).then(people => {
+      if (cancel) return
+      const next = people.some(person => person.id === currentUser.id) ? people : [currentUser, ...people]
+      setRoomMembers(next)
+    }).catch(() => {
+      if (!cancel) setRoomMembers([currentUser])
+    })
+    return () => { cancel = true }
+  }, [live, office.id, currentUser.id, currentUser.name, currentUser.avatar])
   const [officeName, setOfficeName] = useState(office.name)
 
   // Carryable item state
@@ -1222,6 +1246,7 @@ export default function OfficeScreen({ office: officeProp, account, membershipRo
             messages={messages}
             sharedLinks={live ? [] : demoSharedLinks}
             onlineUsers={onlineUsers}
+            members={roomMembers}
             currentUser={currentUser}
             onSendMessage={handleSendMessage}
             onReact={handleReact}

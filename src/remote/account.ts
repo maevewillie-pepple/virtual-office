@@ -193,6 +193,20 @@ export async function renameRemoteOffice(officeId: string, name: string) {
   if (error) throw new Error(error.message)
 }
 
+export async function loadOfficeMembers(officeId: string): Promise<User[]> {
+  if (!isUuid(officeId)) return []
+  const { data, error } = await db()
+    .from('memberships')
+    .select('profiles(id, name, email, avatar, status_message, muted_nudges, muted_sounds, blocked_users, joined_at)')
+    .eq('office_id', officeId)
+  if (error) throw new Error(error.message)
+  const rows = (data ?? []) as { profiles: ProfileRow | ProfileRow[] | null }[]
+  return rows.flatMap(row => {
+    const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles
+    return profile ? [{ ...profileToUser(profile), status: 'offline' as const }] : []
+  })
+}
+
 export async function claimRemoteDesk(officeId: string, deskId: string | null) {
   const client = supabase()
   if (!client || !isUuid(officeId)) return

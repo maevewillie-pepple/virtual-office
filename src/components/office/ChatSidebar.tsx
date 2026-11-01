@@ -9,6 +9,7 @@ interface ChatSidebarProps {
   messages: Message[]
   sharedLinks: SharedLink[]
   onlineUsers: OnlineUser[]
+  members?: User[]
   currentUser: User
   onSendMessage: (content: string) => void
   onReact: (messageId: string, emoji: string) => void
@@ -50,7 +51,7 @@ function HideChatButton({ onHide }: { onHide: () => void }) {
 }
 
 export default function ChatSidebar({
-  messages, sharedLinks, onlineUsers, currentUser, onSendMessage, onReact, isCollapsed,
+  messages, sharedLinks, onlineUsers, members = [], currentUser, onSendMessage, onReact, isCollapsed,
   dmUser, dmThreads = {}, onOpenDm, onCloseDm, onSendDm, onHide,
 }: ChatSidebarProps) {
   const [tab, setTab] = useState<Tab>('chat')
@@ -102,6 +103,16 @@ export default function ChatSidebar({
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
 
+  const onlineIds = new Set(onlineUsers.map(person => person.user.id))
+  const offlineMembers: OnlineUser[] = members
+    .filter(user => !onlineIds.has(user.id))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(user => ({
+      user: { ...user, status: 'offline' },
+      position: { gridX: 0, gridY: 0, x: 0, y: 0 },
+      isCurrentUser: user.id === currentUser.id,
+    }))
+
   if (isCollapsed) return null
 
   // DM view — shown when a dmUser is active
@@ -148,7 +159,6 @@ export default function ChatSidebar({
                 )}
                 <div className={`flex max-w-[85%] flex-col ${mine ? 'items-end' : 'items-start'}`}>
                   <div className={`relative w-fit max-w-full break-words px-2.5 py-1.5 text-[15px] leading-snug text-ink [overflow-wrap:anywhere] ${bubbleClass(mine)}`}>
-                    <BubbleCorner mine={mine} />
                     {msg.text}
                   </div>
                   {mine && <time className="mt-1 text-[12px] text-ink-2">{time}</time>}
@@ -265,39 +275,16 @@ export default function ChatSidebar({
       {/* People tab */}
       {tab === 'people' && (
         <div className="flex-1 overflow-y-auto p-3 space-y-0.5 min-h-0">
-          <p className="type-small text-ink-3 px-2 pb-2 uppercase tracking-wider">
-            {onlineUsers.length} online
-          </p>
-          {onlineUsers.map(ou => (
-            <div
-              key={ou.user.id}
-              className={`flex items-center gap-2.5 p-2 rounded-lg transition-colors group ${ou.isCurrentUser ? 'cursor-default' : 'cursor-pointer hover:bg-muted'}`}
-              onClick={() => !ou.isCurrentUser && onOpenDm && onOpenDm(ou)}
-            >
-              <div className="relative flex-shrink-0">
-                <AvatarSprite config={ou.user.avatar} status={ou.user.status} name={ou.user.name} size={32} />
-                <span className={`absolute bottom-0 right-0 w-2 h-2 rounded-full border border-surface ${STATUS_DOT[ou.user.status]}`} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="type-label text-ink truncate text-[13px]">
-                  {ou.isCurrentUser ? 'You' : ou.user.name}
-                </p>
-                <p className="type-small text-ink-2 truncate">
-                  {ou.focusSession ? '🎧 Focusing' : ou.coffeeBreak ? 'On break' : STATUS_LABEL[ou.user.status]}
-                </p>
-              </div>
-              {!ou.isCurrentUser && (
-                <span className="type-small text-ink-3 opacity-0 group-hover:opacity-100 transition-opacity text-[11px] font-medium border border-border rounded px-1.5 py-0.5 flex-shrink-0">
-                  DM
-                </span>
-              )}
-              {ou.isCurrentUser && ou.deskId && (
-                <span className="type-small text-ink-3 font-mono flex-shrink-0">
-                  {ou.deskId.replace('desk_', 'D')}
-                </span>
-              )}
+          <PeopleList
+            people={onlineUsers}
+            label={`${onlineUsers.length} online`}
+            onOpenDm={onOpenDm}
+          />
+          {offlineMembers.length > 0 && (
+            <div className="mt-3">
+              <PeopleList people={offlineMembers} label="Offline" onOpenDm={onOpenDm} />
             </div>
-          ))}
+          )}
         </div>
       )}
 
@@ -335,27 +322,52 @@ export default function ChatSidebar({
   )
 }
 
-const bubbleClass = (mine: boolean) =>
-  mine
-    ? 'rounded-[4px] rounded-br-none border border-[#c5d0bc] bg-olive-soft'
-    : 'rounded-[4px] rounded-tl-none border border-border bg-muted'
-
-function BubbleCorner({ mine }: { mine: boolean }) {
-  if (mine) {
-    return (
-      <>
-        <span aria-hidden className="pointer-events-none absolute -bottom-px -right-[7px] h-[9px] w-[8px] bg-[#c5d0bc]" style={{ clipPath: 'polygon(0 0, 100% 100%, 0 100%)' }} />
-        <span aria-hidden className="pointer-events-none absolute bottom-0 -right-[6px] h-[7px] w-[7px] bg-olive-soft" style={{ clipPath: 'polygon(0 0, 100% 100%, 0 100%)' }} />
-      </>
-    )
-  }
+function PeopleList({ people, label, onOpenDm }: {
+  people: OnlineUser[]
+  label: string
+  onOpenDm?: (user: OnlineUser) => void
+}) {
   return (
     <>
-      <span aria-hidden className="pointer-events-none absolute -left-[7px] -top-px h-[9px] w-[8px] bg-border" style={{ clipPath: 'polygon(100% 0, 100% 100%, 0 0)' }} />
-      <span aria-hidden className="pointer-events-none absolute -left-[6px] top-0 h-[7px] w-[7px] bg-muted" style={{ clipPath: 'polygon(100% 0, 100% 100%, 0 0)' }} />
+      <p className="type-small text-ink-3 px-2 pb-2 uppercase tracking-wider">{label}</p>
+      {people.map(ou => (
+        <div
+          key={ou.user.id}
+          className={`flex items-center gap-2.5 p-2 rounded-lg transition-colors group ${ou.isCurrentUser ? 'cursor-default' : 'cursor-pointer hover:bg-muted'}`}
+          onClick={() => !ou.isCurrentUser && onOpenDm?.(ou)}
+        >
+          <div className={`relative flex-shrink-0 ${ou.user.status === 'offline' ? 'opacity-60' : ''}`}>
+            <AvatarSprite config={ou.user.avatar} status={ou.user.status} name={ou.user.name} size={32} />
+            <span className={`absolute bottom-0 right-0 w-2 h-2 rounded-full border border-surface ${STATUS_DOT[ou.user.status]}`} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="type-label text-ink truncate text-[13px]">
+              {ou.isCurrentUser ? 'You' : ou.user.name}
+            </p>
+            <p className="type-small text-ink-2 truncate">
+              {ou.focusSession ? '🎧 Focusing' : ou.coffeeBreak ? 'On break' : STATUS_LABEL[ou.user.status]}
+            </p>
+          </div>
+          {!ou.isCurrentUser && (
+            <span className="type-small text-ink-3 opacity-0 group-hover:opacity-100 transition-opacity text-[11px] font-medium border border-border rounded px-1.5 py-0.5 flex-shrink-0">
+              DM
+            </span>
+          )}
+          {ou.isCurrentUser && ou.deskId && (
+            <span className="type-small text-ink-3 font-mono flex-shrink-0">
+              {ou.deskId.replace('desk_', 'D')}
+            </span>
+          )}
+        </div>
+      ))}
     </>
   )
 }
+
+const bubbleClass = (mine: boolean) =>
+  mine
+    ? 'rounded-[16px] rounded-br-[4px] border border-[#c5d0bc] bg-olive-soft'
+    : 'rounded-[16px] rounded-tl-[4px] border border-border bg-muted'
 
 interface MessageItemProps {
   msg: Message
@@ -377,7 +389,6 @@ function MessageItem({ msg, isOwn, continued, currentUserId, onReact, showEmojiP
   const body = (
     <div className={`min-w-0 max-w-full ${isOwn ? 'flex flex-col items-end' : ''}`}>
       <div className={`relative w-fit max-w-full break-words px-2.5 py-1.5 pr-7 text-[15px] leading-snug text-ink [overflow-wrap:anywhere] ${bubbleClass(isOwn)}`}>
-        <BubbleCorner mine={isOwn} />
         {msg.content}
         {msg.linkPreview && (
           <a
