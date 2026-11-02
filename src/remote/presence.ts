@@ -12,6 +12,8 @@ export interface PresencePayload {
   focusEndsAt: string | null
   focusTopic: string | null
   focusPaused: boolean
+  /** When this position was sent, so an older update cannot pull someone backward. */
+  at?: number
 }
 
 export interface PresenceRoom {
@@ -33,6 +35,8 @@ export function joinPresence(officeId: string, initial: PresencePayload, onSync:
   let latest = initial
   let ready = false
   let trackedAt = 0
+  let sentAt = 0
+  let sentKey = ''
   let lastKey = ''
   const places = new Map<string, PresencePayload>()
   const heard = new Map<string, number>()
@@ -49,6 +53,8 @@ export function joinPresence(officeId: string, initial: PresencePayload, onSync:
 
   const remember = (person: PresencePayload) => {
     if (!person?.user?.id) return
+    const prev = places.get(person.user.id)
+    if (prev && (person.at ?? 0) < (prev.at ?? 0)) return
     places.set(person.user.id, person)
     heard.set(person.user.id, Date.now())
   }
@@ -67,7 +73,9 @@ export function joinPresence(officeId: string, initial: PresencePayload, onSync:
         continue
       }
       const known = byId.get(id)
-      byId.set(id, known ? { ...known, ...place, user: known.user } : place)
+      if (!known || (place.at ?? 0) >= (known.at ?? 0)) {
+        byId.set(id, known ? { ...known, ...place, user: known.user } : place)
+      }
     }
     const list = [...byId.values()]
     const key = list.map(person => `${person.user.id}:${person.gridX}:${person.gridY}:${person.status}`).sort().join('|')
@@ -78,9 +86,10 @@ export function joinPresence(officeId: string, initial: PresencePayload, onSync:
 
   const announce = (forceTrack: boolean) => {
     if (!ready) return
+    latest = { ...latest, at: Date.now() }
     void channel.send({ type: 'broadcast', event: 'move', payload: latest })
     const now = Date.now()
-    if (!forceTrack && now - trackedAt < 400) return
+    if (!forceTrack && now - trackedAt < 1000) return
     trackedAt = now
     void channel.track(latest)
   }
@@ -99,12 +108,16 @@ export function joinPresence(officeId: string, initial: PresencePayload, onSync:
   })
   const pulse = setInterval(() => {
     if (!ready) return
-    void channel.send({ type: 'broadcast', event: 'move', payload: latest })
-    void channel.track(latest)
-  }, 4000)
+    announce(true)
+  }, 2000)
   return {
     update(payload) {
+      const key = `${payload.gridX}:${payload.gridY}:${payload.status}:${payload.seated}:${payload.onBreak}:${payload.carried ?? ''}:${payload.focusEndsAt ?? ''}`
+      const now = Date.now()
       latest = payload
+      if (key === sentKey && now - sentAt < 80) return
+      sentKey = key
+      sentAt = now
       announce(false)
     },
     leave() {

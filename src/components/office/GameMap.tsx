@@ -13,6 +13,8 @@ interface GameMapProps {
   onDeskClick: (desk: Desk) => void
   onAvatarClick: (user: OnlineUser) => void
   onUserMove: (gridX: number, gridY: number) => void
+  /** Latest positions from other people, applied on the animation frame they arrive. */
+  peerSpots?: React.RefObject<Map<string, { gridX: number; gridY: number; seated: boolean }>>
   currentUserPosition: { gridX: number; gridY: number }
   focusSession?: { duration: number; endsAt: string; paused: boolean } | null
   userDeskPosition?: { gridX: number; gridY: number } | null
@@ -30,7 +32,7 @@ const TILE_SIZE = 48
 
 export default function GameMap({
   map, onlineUsers, currentUserId, onAvatarClick,
-  onUserMove, currentUserPosition, focusSession, userDeskPosition, speechBubbles = [], onInteract,
+  onUserMove, peerSpots, currentUserPosition, focusSession, userDeskPosition, speechBubbles = [], onInteract,
   decorative = false, suspendInput = false, fireplaceLit = true, debateMarker = null,
 }: GameMapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -42,6 +44,8 @@ export default function GameMap({
   const [cycle, setCycle] = useState(0)
   const [facing, setFacing] = useState({ x: 0, y: 1 })
   const avatarOffsetsRef = useRef<Record<string, number>>({})
+  const frameDtRef = useRef(16)
+  const motionRef = useRef(new Map<string, { x: number; y: number }>())
   const walkTimers = useRef<number[]>([])
   const prevPos = useRef(currentUserPosition)
 
@@ -140,7 +144,10 @@ export default function GameMap({
 
   // Animation + render loop: update avatar bob offsets and redraw every frame
   useEffect(() => {
-    const animate = () => {
+    let last = performance.now()
+    const animate = (now: number) => {
+      frameDtRef.current = Math.min(48, now - last)
+      last = now
       tickRef.current++
       const offsets: Record<string, number> = {}
       onlineUsers.forEach(u => {
@@ -290,10 +297,48 @@ export default function GameMap({
       }
     }
 
+    const placed = new Map<string, { x: number; y: number }>()
+    const placeOf = (ou: OnlineUser) => {
+      const cached = placed.get(ou.user.id)
+      if (cached) return cached
+      if (ou.isCurrentUser || !peerSpots?.current) {
+        const point = { x: ou.position.gridX * TILE_SIZE + TILE_SIZE / 2, y: ou.position.gridY * TILE_SIZE + TILE_SIZE / 2 }
+        placed.set(ou.user.id, point)
+        return point
+      }
+      const spot = peerSpots.current.get(ou.user.id)
+      const tx = (spot?.gridX ?? ou.position.gridX) * TILE_SIZE + TILE_SIZE / 2
+      const ty = (spot?.gridY ?? ou.position.gridY) * TILE_SIZE + TILE_SIZE / 2
+      if (spot?.seated || ou.seated) {
+        motionRef.current.set(ou.user.id, { x: tx, y: ty })
+        const point = { x: tx, y: ty }
+        placed.set(ou.user.id, point)
+        return point
+      }
+      let motion = motionRef.current.get(ou.user.id)
+      if (!motion) {
+        motion = { x: tx, y: ty }
+        motionRef.current.set(ou.user.id, motion)
+      }
+      const dx = tx - motion.x
+      const dy = ty - motion.y
+      const dist = Math.hypot(dx, dy)
+      if (dist > TILE_SIZE * 2.2) {
+        motion.x = tx
+        motion.y = ty
+      } else if (dist > 0.4) {
+        const step = Math.min(dist, (TILE_SIZE / 100) * frameDtRef.current)
+        motion.x += (dx / dist) * step
+        motion.y += (dy / dist) * step
+      }
+      const point = { x: motion.x, y: motion.y }
+      placed.set(ou.user.id, point)
+      return point
+    }
+
     // Draw avatars + carried items
     for (const ou of onlineUsers) {
-      const px = ou.position.gridX * TILE_SIZE + TILE_SIZE / 2
-      const py = ou.position.gridY * TILE_SIZE + TILE_SIZE / 2
+      const { x: px, y: py } = placeOf(ou)
       const bobOffset = ou.seated ? 6 : (avatarOffsets[ou.user.id] || 0)
       drawAvatar(
         ctx, px, py, ou.user.avatar,
@@ -327,8 +372,7 @@ export default function GameMap({
         const bubble = speechBubbles.find(b => b.userId === ou.user.id && b.expiresAt > now)
         if (!bubble) continue
 
-        const px = ou.position.gridX * TILE_SIZE + TILE_SIZE / 2
-        const py = ou.position.gridY * TILE_SIZE + TILE_SIZE / 2
+        const { x: px, y: py } = placeOf(ou)
         const bob = avatarOffsets[ou.user.id] || 0
         const remaining = bubble.expiresAt - now
         const alpha = remaining > 1000 ? 1 : Math.max(0, remaining / 1000)
@@ -413,8 +457,9 @@ export default function GameMap({
 
     // Interaction bubble over nearby user's head
     if (!decorative && nearbyUser) {
-      const npx = nearbyUser.position.gridX * TILE_SIZE + TILE_SIZE / 2
-      const npy = nearbyUser.position.gridY * TILE_SIZE - 4
+      const near = placeOf(nearbyUser)
+      const npx = near.x
+      const npy = near.y - TILE_SIZE / 2 - 4
       const name = nearbyUser.user.name.split(' ')[0]
       const label = `↑ Enter · ${name}`
       ctx.font = 'bold 12px monospace'
@@ -469,7 +514,7 @@ export default function GameMap({
     }
 
     ctx.restore()
-  }, [map, onlineUsers, cameraX, cameraY, hoveredTile, currentUserId, focusSession, userDeskPosition, nearbyUser, mapScale, speechBubbles, nearbyInteractable, nearby, decorative, interactables, fireplaceLit, debateMarker])
+  }, [map, onlineUsers, cameraX, cameraY, hoveredTile, currentUserId, focusSession, userDeskPosition, nearbyUser, mapScale, speechBubbles, nearbyInteractable, nearby, decorative, interactables, fireplaceLit, debateMarker, peerSpots])
 
   // Keep renderRef current so the RAF loop always calls the latest render
   useEffect(() => { renderRef.current = render }, [render])

@@ -290,6 +290,7 @@ export default function OfficeScreen({ office: officeProp, account, membershipRo
   }, [office.id, currentUser.id])
 
   const presenceRef = useRef<ReturnType<typeof joinPresence> | null>(null)
+  const peerSpots = useRef(new Map<string, { gridX: number; gridY: number; seated: boolean }>())
   const presencePayload = useCallback((): PresencePayload => ({
     user: currentUser,
     gridX: currentPos.gridX,
@@ -309,6 +310,15 @@ export default function OfficeScreen({ office: officeProp, account, membershipRo
     let stopDocs = () => {}
     const room = joinPresence(office.id, presencePayload(), people => {
       const mine = currentUser.id
+      const seen = new Set<string>()
+      for (const person of people) {
+        if (person.user.id === mine) continue
+        seen.add(person.user.id)
+        peerSpots.current.set(person.user.id, { gridX: person.gridX, gridY: person.gridY, seated: person.seated })
+      }
+      for (const id of peerSpots.current.keys()) {
+        if (!seen.has(id)) peerSpots.current.delete(id)
+      }
       setOnlineUsers(prev => {
         const local = prev.find(person => person.isCurrentUser)
         const next = people.map(person => {
@@ -589,8 +599,9 @@ export default function OfficeScreen({ office: officeProp, account, membershipRo
     setOnlineUsers(prev => prev.map(u =>
       u.isCurrentUser ? { ...u, position: { ...u.position, gridX, gridY, x: gridX * 48, y: gridY * 48 } } : u
     ))
+    presenceRef.current?.update({ ...presencePayload(), gridX, gridY })
     saveState({ currentPos: { gridX, gridY }, designId })
-  }, [])
+  }, [designId, presencePayload])
 
   const handleDeskClick = useCallback((desk: Desk) => {
     setSelectedDesk(desk)
@@ -1122,6 +1133,7 @@ export default function OfficeScreen({ office: officeProp, account, membershipRo
             onDeskClick={handleDeskClick}
             onAvatarClick={setSelectedUser}
             onUserMove={handleUserMove}
+            peerSpots={peerSpots}
             currentUserPosition={currentPos}
             focusSession={focusSession}
             userDeskPosition={userDeskPosition}
