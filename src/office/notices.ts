@@ -1,4 +1,5 @@
 import { publishNotices } from '../remote/sync'
+import { isUuid, supabase } from '../remote/client'
 
 export type NoticeKind = 'interaction' | 'discussion' | 'jam' | 'board'
 export type InteractionAction = 'wave' | 'nudge' | 'coffee' | 'focus' | 'gift' | 'message'
@@ -27,6 +28,27 @@ function keyFor(officeId: string) {
   return `vo_notices_${officeId}`
 }
 
+function readsKey(officeId: string, userId: string) {
+  return `vo_notice_reads_${officeId}_${userId}`
+}
+
+function readIds(officeId: string, userId: string): Set<string> {
+  if (!userId) return new Set()
+  try {
+    const raw = localStorage.getItem(readsKey(officeId, userId))
+    const parsed = raw ? JSON.parse(raw) as string[] : []
+    return new Set(Array.isArray(parsed) ? parsed : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function saveIds(officeId: string, userId: string, ids: Set<string>) {
+  if (!userId) return
+  try { localStorage.setItem(readsKey(officeId, userId), JSON.stringify([...ids].slice(-200))) } catch { /* ignore */ }
+  window.dispatchEvent(new CustomEvent(EVENT, { detail: keyFor(officeId) }))
+}
+
 function read(officeId: string): OfficeNotice[] {
   try {
     const raw = localStorage.getItem(keyFor(officeId))
@@ -37,16 +59,33 @@ function read(officeId: string): OfficeNotice[] {
   }
 }
 
-function write(officeId: string, notices: OfficeNotice[]) {
+function store(officeId: string, notices: OfficeNotice[], publish: boolean) {
   const key = keyFor(officeId)
-  const next = notices.slice(0, MAX)
+  const next = notices.slice(0, MAX).map(notice => ({ ...notice, read: false }))
   try { localStorage.setItem(key, JSON.stringify(next)) } catch { /* ignore */ }
-  publishNotices(officeId, next)
+  if (publish) publishNotices(officeId, next)
   window.dispatchEvent(new CustomEvent(EVENT, { detail: key }))
 }
 
-export function loadNotices(officeId: string): OfficeNotice[] {
-  return read(officeId)
+function broadcastNotice(officeId: string, notice: OfficeNotice) {
+  const client = supabase()
+  if (!client || !isUuid(officeId)) return
+  const channel = client.channel(`office-notices:${officeId}`, {
+    config: { broadcast: { self: false } },
+  })
+  void channel.send({
+    type: 'broadcast',
+    event: 'notice',
+    payload: { ...notice, read: false },
+  })
+}
+
+export function loadNotices(officeId: string, userId = ''): OfficeNotice[] {
+  const reads = readIds(officeId, userId)
+  return read(officeId).map(notice => ({
+    ...notice,
+    read: reads.has(notice.id) || (!!userId && notice.actorId === userId),
+  }))
 }
 
 export function pushNotice(officeId: string, notice: Omit<OfficeNotice, 'at' | 'read'> & { at?: string; read?: boolean }) {
@@ -55,21 +94,67 @@ export function pushNotice(officeId: string, notice: Omit<OfficeNotice, 'at' | '
   const next: OfficeNotice = {
     ...notice,
     at: notice.at ?? new Date().toISOString(),
-    read: notice.read ?? false,
+    read: false,
   }
-  write(officeId, [next, ...current])
+  store(officeId, [next, ...current], true)
+  broadcastNotice(officeId, next)
 }
 
-export function markNoticeRead(officeId: string, id: string) {
+export function receiveNotice(officeId: string, notice: OfficeNotice) {
+  if (!notice?.id) return
   const current = read(officeId)
-  if (!current.some(item => item.id === id && !item.read)) return
-  write(officeId, current.map(item => item.id === id ? { ...item, read: true } : item))
+  if (current.some(item => item.id === notice.id)) return
+  const next: OfficeNotice = {
+    ...notice,
+    at: notice.at ?? new Date().toISOString(),
+    read: false,
+  }
+  store(officeId, [next, ...current], false)
 }
 
-export function markAllNoticesRead(officeId: string) {
-  const current = read(officeId)
-  if (!current.some(item => !item.read)) return
-  write(officeId, current.map(item => item.read ? item : { ...item, read: true }))
+export function applyRemoteNoticeDoc(officeId: string, doc: unknown) {
+  if (!Array.isArray(doc)) return
+  const incoming = doc as OfficeNotice[]
+  const byId = new Map<string, OfficeNotice>()
+  for (const notice of [...incoming, ...read(officeId)]) {
+    if (!notice?.id || byId.has(notice.id)) continue
+    byId.set(notice.id, { ...notice, at: notice.at ?? new Date().toISOString(), read: false })
+  }
+  const merged = [...byId.values()].sort((a, b) => String(b.at).localeCompare(String(a.at)))
+  store(officeId, merged, false)
+}
+
+export function listenForSharedNotices(officeId: string, onChange: () => void) {
+  const client = supabase()
+  if (!client || !isUuid(officeId)) return () => {}
+  const channel = client.channel(`office-notices:${officeId}`, {
+    config: { broadcast: { self: false } },
+  })
+  channel.on('broadcast', { event: 'notice' }, ({ payload }: { payload?: OfficeNotice }) => {
+    if (!payload?.id) return
+    receiveNotice(officeId, payload)
+    onChange()
+  })
+  channel.subscribe()
+  return () => { void client.removeChannel(channel) }
+}
+
+export function markNoticeRead(officeId: string, userId: string, id: string) {
+  const ids = readIds(officeId, userId)
+  if (ids.has(id)) return
+  ids.add(id)
+  saveIds(officeId, userId, ids)
+}
+
+export function markAllNoticesRead(officeId: string, userId: string) {
+  const ids = readIds(officeId, userId)
+  let changed = false
+  for (const notice of read(officeId)) {
+    if (ids.has(notice.id)) continue
+    ids.add(notice.id)
+    changed = true
+  }
+  if (changed) saveIds(officeId, userId, ids)
 }
 
 export function subscribeNotices(officeId: string, onChange: () => void) {
@@ -93,7 +178,8 @@ export function noticeHeadline(notice: OfficeNotice, userId: string): string {
   if (notice.action === 'coffee') return `${actor} invited ${person} for a coffee`
   if (notice.action === 'focus') return `${actor} invited ${person} to focus`
   if (notice.action === 'gift') return `${actor} gave ${person} ${notice.detail || 'something'}`
-  if (notice.action === 'message') return `${actor} sent ${person} a message`
+  if (notice.action === 'message' && notice.personId) return `${actor} sent ${person} a message`
+  if (notice.action === 'message') return `${actor} sent a message`
   if (notice.action === 'nudge') return `${actor} nudged ${person}`
   return `${actor} waved at ${person}`
 }

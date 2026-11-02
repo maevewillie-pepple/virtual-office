@@ -25,7 +25,7 @@ import { readWord } from '../../game/arcade/store'
 import { buildRoomIndex, roomIdAt } from '../../collaboration/rooms'
 import { activeSession, findLiveMarker, migrateLegacyBoards, readOfficeBoards, readOfficeDiscussions, subscribeAny, type BoardItem } from '../../collaboration/store'
 import NotificationCentre from '../office/NotificationCentre'
-import { loadNotices, markAllNoticesRead, markNoticeRead, pushNotice, subscribeNotices, type InteractionAction, type OfficeNotice } from '../../office/notices'
+import { listenForSharedNotices, loadNotices, markAllNoticesRead, markNoticeRead, pushNotice, subscribeNotices, type InteractionAction, type OfficeNotice } from '../../office/notices'
 import { seatBesideDesk } from '../../utils/interactions'
 import { MessageSquare } from 'lucide-react'
 import { ToastContainer, useToasts } from '../ui/Toast'
@@ -252,7 +252,7 @@ export default function OfficeScreen({ office: officeProp, account, membershipRo
   const [showSettings, setShowSettings] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
   const [showTasks, setShowTasks] = useState(false)
-  const [notices, setNotices] = useState<OfficeNotice[]>(() => loadNotices(office.id))
+  const [notices, setNotices] = useState<OfficeNotice[]>(() => loadNotices(office.id, currentUser.id))
   const [noticesOpen, setNoticesOpen] = useState(false)
   const [enterDiscussion, setEnterDiscussion] = useState(false)
 
@@ -278,10 +278,16 @@ export default function OfficeScreen({ office: officeProp, account, membershipRo
   const canManageJam = canEditMusic || officeMusic.jam?.sharedById === currentUser.id
 
   useEffect(() => {
-    setNotices(loadNotices(office.id))
+    const refresh = () => setNotices(loadNotices(office.id, currentUser.id))
+    refresh()
     setNoticesOpen(false)
-    return subscribeNotices(office.id, () => setNotices(loadNotices(office.id)))
-  }, [office.id])
+    const stopLocal = subscribeNotices(office.id, refresh)
+    const stopShared = listenForSharedNotices(office.id, refresh)
+    return () => {
+      stopLocal()
+      stopShared()
+    }
+  }, [office.id, currentUser.id])
 
   const presenceRef = useRef<ReturnType<typeof joinPresence> | null>(null)
   const presencePayload = useCallback((): PresencePayload => ({
@@ -357,7 +363,7 @@ export default function OfficeScreen({ office: officeProp, account, membershipRo
     })
     const reloadShared = () => {
       setOfficeMusic(loadOfficeMusic(musicKey))
-      setNotices(loadNotices(office.id))
+      setNotices(loadNotices(office.id, currentUser.id))
       try {
         const raw = localStorage.getItem('vo_focus_history')
         if (raw) setFocusHistory(JSON.parse(raw) as FocusHistoryEntry[])
@@ -623,6 +629,15 @@ export default function OfficeScreen({ office: officeProp, account, membershipRo
     setMessages(prev => [...prev, newMsg])
     if (live) void sendOfficeMessage(newMsg)
     addSpeechBubble(currentUser.id, content, 'chat', 5000)
+    pushNotice(office.id, {
+      id: `chat_${newMsg.id}`,
+      kind: 'interaction',
+      action: 'message',
+      actorId: currentUser.id,
+      actorName: currentUser.name,
+      title: 'Message',
+      detail: content.trim().slice(0, 80),
+    })
   }, [office.id, currentUser, addSpeechBubble, live])
 
   const handleReact = useCallback((messageId: string, emoji: string) => {
@@ -1058,10 +1073,10 @@ export default function OfficeScreen({ office: officeProp, account, membershipRo
         <NotificationCentre
           notices={notices}
           userId={currentUser.id}
-          onMarkAll={() => markAllNoticesRead(office.id)}
+          onMarkAll={() => markAllNoticesRead(office.id, currentUser.id)}
           onClose={() => setNoticesOpen(false)}
           onOpen={notice => {
-            markNoticeRead(office.id, notice.id)
+            markNoticeRead(office.id, currentUser.id, notice.id)
             setNoticesOpen(false)
             if (notice.kind === 'discussion') {
               const table = (officeMap.interactables ?? []).find(obj =>

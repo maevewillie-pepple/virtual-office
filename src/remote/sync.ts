@@ -1,5 +1,6 @@
 import type { FocusHistoryEntry } from '../types'
 import type { BaristaStats } from '../game/barista/logic'
+import { applyRemoteNoticeDoc } from '../office/notices'
 import { isRemoteConfigured, isUuid, supabase } from './client'
 
 const BOARD_PREFIX = 'vo_shared_board_'
@@ -143,7 +144,7 @@ export async function hydrateOffice(officeId: string) {
   }
   if (notices.data) {
     const row = notices.data as OfficeRow
-    if (!echoed(`notices:${officeId}`, row.updated_at)) put(`vo_notices_${officeId}`, row.doc, 'vo-notices', officeId)
+    if (!echoed(`notices:${officeId}`, row.updated_at)) applyRemoteNoticeDoc(officeId, row.doc)
   }
   for (const row of (notes.data ?? []) as ScopedRow[]) {
     if (!echoed(`notes:${officeId}:${row.design_id}`, row.updated_at)) put(`vo_notes_${row.design_id}`, row.doc, 'vo-notes', row.design_id)
@@ -213,7 +214,7 @@ export function subscribeOfficeDocs(officeId: string, onApply: () => void) {
   })
   listen('notice_docs', row => {
     const item = row as unknown as OfficeRow
-    if (!echoed(`notices:${officeId}`, item.updated_at)) put(`vo_notices_${officeId}`, item.doc, 'vo-notices', officeId)
+    if (!echoed(`notices:${officeId}`, item.updated_at)) applyRemoteNoticeDoc(officeId, item.doc)
   })
   listen('desk_notes', row => {
     const item = row as unknown as ScopedRow
