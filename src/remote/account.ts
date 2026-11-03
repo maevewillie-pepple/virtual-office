@@ -207,11 +207,54 @@ export async function loadOfficeMembers(officeId: string): Promise<User[]> {
   })
 }
 
-export async function claimRemoteDesk(officeId: string, deskId: string | null) {
+export interface DeskClaim {
+  userId: string
+  name: string
+  deskId: string | null
+}
+
+export async function loadDeskClaims(officeId: string): Promise<DeskClaim[]> {
+  if (!isUuid(officeId)) return []
+  const { data, error } = await db()
+    .from('memberships')
+    .select('user_id, desk_id, profiles(name)')
+    .eq('office_id', officeId)
+  if (error) throw new Error(error.message)
+  const rows = (data ?? []) as { user_id: string; desk_id: string | null; profiles: { name: string } | { name: string }[] | null }[]
+  return rows.flatMap(row => {
+    const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles
+    if (!profile?.name || !row.desk_id) return []
+    return [{ userId: row.user_id, name: profile.name, deskId: row.desk_id }]
+  })
+}
+
+export function listenForDeskClaims(officeId: string, onClaim: (claim: DeskClaim) => void) {
+  const client = supabase()
+  if (!client || !isUuid(officeId)) return () => {}
+  const channel = client.channel(`desks:${officeId}`, {
+    config: { broadcast: { self: false } },
+  })
+  channel.on('broadcast', { event: 'claim' }, ({ payload }: { payload?: DeskClaim }) => {
+    if (!payload?.userId) return
+    onClaim({ userId: payload.userId, name: payload.name, deskId: payload.deskId ?? null })
+  })
+  channel.subscribe()
+  return () => { void client.removeChannel(channel) }
+}
+
+export async function claimRemoteDesk(officeId: string, deskId: string | null, name: string) {
   const client = supabase()
   if (!client || !isUuid(officeId)) return
   const { data } = await client.auth.getUser()
   if (!data.user) return
   const { error } = await client.from('memberships').update({ desk_id: deskId }).eq('office_id', officeId).eq('user_id', data.user.id)
   if (error) throw new Error(error.message)
+  const channel = client.channel(`desks:${officeId}`, {
+    config: { broadcast: { self: false } },
+  })
+  void channel.send({
+    type: 'broadcast',
+    event: 'claim',
+    payload: { userId: data.user.id, name, deskId },
+  })
 }

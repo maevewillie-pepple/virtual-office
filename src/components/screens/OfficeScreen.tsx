@@ -33,12 +33,30 @@ import type { FocusHistoryEntry } from '../../types'
 import { loadMusicPreferences, loadOfficeMusic, parseJamInvite, parseSpotifyContent, saveMusicPreferences, saveOfficeMusic, spotifyKindLabel, spotifyOpenUrl } from '../../utils/spotify'
 import { isRemoteConfigured, isUuid } from '../../remote/client'
 import { inviteLabel, inviteLink } from '../../utils/invite'
-import { claimRemoteDesk, loadOfficeMembers, renameRemoteOffice } from '../../remote/account'
+import { claimRemoteDesk, listenForDeskClaims, loadDeskClaims, loadOfficeMembers, renameRemoteOffice, type DeskClaim } from '../../remote/account'
 import { loadOfficeMessages, saveReaction, sendOfficeMessage, subscribeOfficeMessages } from '../../remote/messages'
 import { joinPresence, presenceToOnline, type PresencePayload } from '../../remote/presence'
 import { hydrateOffice, hydratePersonal, publishFocus, publishNotes, publishPlants, subscribeOfficeDocs } from '../../remote/sync'
 
 const STORAGE_KEY = 'vo_office_state'
+
+function openDesk(desk: Desk): Desk {
+  return { ...desk, ownerId: undefined, ownerName: undefined, isAvailable: true }
+}
+
+function assignDesk(desks: Desk[], claim: DeskClaim): Desk[] {
+  return desks.map(desk => {
+    const released = desk.ownerId === claim.userId ? openDesk(desk) : desk
+    if (claim.deskId && released.id === claim.deskId) {
+      return { ...released, ownerId: claim.userId, ownerName: claim.name, isAvailable: false }
+    }
+    return released
+  })
+}
+
+function desksFromClaims(desks: Desk[], claims: DeskClaim[]): Desk[] {
+  return claims.reduce(assignDesk, desks.map(openDesk))
+}
 
 function demoRoomMembers(officeId: string, currentUser: User): User[] {
   const memberIds = new Set(
@@ -150,11 +168,11 @@ export default function OfficeScreen({ office: officeProp, account, membershipRo
     } : ou))
   }, [currentUser.name, currentUser.email, currentUser.avatar])
   const [desks, setDesks] = useState(() =>
-    live
-      ? officeMap.desks
-      : officeMap.desks.map((d, i) =>
+    designAdmin
+      ? officeMap.desks.map((d, i) =>
         i === 0 ? { ...d, ownerId: currentUser.id, ownerName: 'You', isAvailable: false } : d
       )
+      : officeMap.desks.map(openDesk)
   )
   const [currentPos, setCurrentPos] = useState(
     savedState?.currentPos ?? { gridX: 2, gridY: 3 }
@@ -192,6 +210,33 @@ export default function OfficeScreen({ office: officeProp, account, membershipRo
     })
     return () => { cancel = true }
   }, [live, office.id, currentUser.id, currentUser.name, currentUser.avatar])
+
+  useEffect(() => {
+    if (!live) return
+    let cancel = false
+    const mine = currentUser.id
+    const mineName = currentUser.name
+    void loadDeskClaims(office.id).then(claims => {
+      if (cancel) return
+      setDesks(prev => {
+        const fromServer = desksFromClaims(officeMap.desks, claims)
+        const localMine = prev.find(desk => desk.ownerId === mine)
+        if (localMine && !fromServer.some(desk => desk.ownerId === mine)) {
+          return assignDesk(fromServer, { userId: mine, name: mineName, deskId: localMine.id })
+        }
+        return fromServer
+      })
+    }).catch(() => {
+      if (!cancel) setDesks(officeMap.desks.map(openDesk))
+    })
+    const stop = listenForDeskClaims(office.id, claim => {
+      setDesks(prev => assignDesk(prev, claim))
+    })
+    return () => {
+      cancel = true
+      stop()
+    }
+  }, [live, office.id, officeMap, currentUser.id, currentUser.name])
   const [officeName, setOfficeName] = useState(office.name)
 
   // Carryable item state
@@ -613,7 +658,7 @@ export default function OfficeScreen({ office: officeProp, account, membershipRo
         ? { ...d, ownerId: currentUser.id, ownerName: currentUser.name, isAvailable: false }
         : d.ownerId === currentUser.id ? { ...d, ownerId: undefined, ownerName: undefined, isAvailable: true } : d
     ))
-    if (live) void claimRemoteDesk(office.id, deskId)
+    if (live) void claimRemoteDesk(office.id, deskId, currentUser.name)
     addToast('Desk claimed! This is your spot 🪑', 'success')
   }, [currentUser.id, currentUser.name, addToast, live, office.id])
 
@@ -621,9 +666,9 @@ export default function OfficeScreen({ office: officeProp, account, membershipRo
     setDesks(prev => prev.map(d =>
       d.id === deskId ? { ...d, ownerId: undefined, ownerName: undefined, isAvailable: true } : d
     ))
-    if (live) void claimRemoteDesk(office.id, null)
+    if (live) void claimRemoteDesk(office.id, null, currentUser.name)
     addToast('Desk released', 'info')
-  }, [addToast, live, office.id])
+  }, [addToast, live, office.id, currentUser.name])
 
   const handleSendMessage = useCallback((content: string) => {
     const newMsg: Message = {
