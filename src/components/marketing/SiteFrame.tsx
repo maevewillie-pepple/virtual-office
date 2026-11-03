@@ -60,17 +60,19 @@ export default function SiteFrame({
   return (
     <div className="flex min-h-full flex-col bg-canvas text-ink">
       <header className="sticky top-0 z-20 border-b-2 border-ink bg-surface">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3 md:px-6">
-          <button
-            type="button"
-            onClick={() => go('home')}
-            className="flex items-center gap-2 text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-          >
-            <img src="/logo.png" alt="" width={40} height={38} className="h-10 w-10 object-contain [image-rendering:pixelated]" />
-            <span className="font-display text-[13px] font-bold uppercase tracking-[0.18em]">Side desk</span>
-          </button>
+        <div className="relative grid grid-cols-[minmax(0,1fr)_auto] items-center py-3 pl-10 pr-[6%] md:grid-cols-[minmax(420px,1.25fr)_minmax(260px,0.75fr)] md:py-0 md:pl-0 md:pr-0">
+          <div className="flex items-center md:px-16 md:py-3 lg:px-20">
+            <button
+              type="button"
+              onClick={() => go('home')}
+              className="flex items-center gap-2 text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              <img src="/logo.png" alt="" width={40} height={38} className="h-10 w-10 object-contain [image-rendering:pixelated]" />
+              <span className="font-display text-[13px] font-bold uppercase tracking-[0.18em]">Side desk</span>
+            </button>
+          </div>
 
-          <nav className="hidden items-center gap-1 md:flex" aria-label="Homepage">
+          <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 md:flex" aria-label="Homepage">
             {LINKS.map(link => (
               <NavLink
                 key={link.id}
@@ -81,7 +83,7 @@ export default function SiteFrame({
             ))}
           </nav>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-end gap-2 md:py-3 md:pr-[6%]">
             <button
               type="button"
               className="btn-stamp border-2 border-ink bg-surface px-2.5 py-1.5 font-mono text-[13px] font-bold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-focus md:hidden"
